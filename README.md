@@ -1,5 +1,10 @@
 # CC5513 Procesamiento Geometrico y Análisis de Formas
 
+## Apuntes y notebooks
+
+* **Apuntes del curso** (en inglés): [CC5513_apuntes.pdf](./apuntes/CC5513_apuntes.pdf). Compendio de los 14 temas con desarrollos, ejemplos, algoritmos, ejercicios y 78 figuras. Las fuentes LaTeX y los scripts que generan las figuras están en [apuntes/](./apuntes).
+* **Notebooks** de los Temas 2, 4, 6, 7, 13 y 14: [notebooks/](./notebooks).
+
 ## Contenido
 
 * Introducción [Slides](./Slides/Tema1_Introduccion.pdf)

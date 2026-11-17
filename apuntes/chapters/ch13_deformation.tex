@@ -1,0 +1,256 @@
+\chapter{Mesh Deformation}\label{ch:deform}
+
+Deformation creates new shapes by editing existing ones: a ball that squashes when it bounces, a
+character that walks or talks, a design variant obtained by pulling part of a model. Behind an
+intuitive interface (the user grabs a handle and drags it) hide the mathematical concepts of this
+chapter: interpolation and generalized barycentric coordinates, skinning, and variational methods
+that minimise an energy measuring how much the surface is distorted. It follows Tema 11 and the
+survey of \citet{Botsch2008}. We use the cotangent matrix $\mC$ of \cref{ch:smooth}.
+
+\section{Controlling a deformation}
+
+Moving vertices one by one is easy but tedious; moving a group of vertices rigidly is easy but too
+restrictive, since it tears the surface at the border of the group. A practical interface lets
+the user move a \emph{handle} region $H$ while keeping a region $F$ fixed, and the rest of the
+surface, the \emph{region of interest}, must deform in an intuitive way. The simplest way of
+propagating the motion is \emph{attenuation}: every vertex receives the handle displacement
+$\bd$ scaled by a smooth falloff of its distance to the handle,
+\begin{equation}
+\bx'_i=\bx_i+\phi\bigl(\operatorname{dist}(\bx_i,H)/R\bigr)\,\bd,\qquad
+\phi(s)=(1-s^2)^2\ \text{for}\ s<1,\ 0\ \text{otherwise}.
+\end{equation}
+The choice of distance is a trade-off between quality and computational cost: Euclidean distance
+is cheap but leaks the deformation to parts that are close in space but far on the surface; the
+minimal number of edges (a breadth-first search) is cheap and intrinsic but depends on the
+tessellation; geodesic distance is intrinsic and accurate but more expensive (\cref{fig:attenuation}).
+Attenuation translates vertices but never rotates them, so details are sheared rather than
+rotated; the methods below solve this.
+
+\fig[0.85\textwidth]{ch13_attenuation.png}{Moving a front hoof of the horse with attenuation
+($R=0.3$, unit diagonal). Left: geodesic distance to the handle. Centre: with Euclidean distance the
+displacement leaks to the chest and the other front leg. Right: with geodesic distance it stays on
+the dragged leg.}{fig:attenuation}
+
+Deformation methods can be classified as \emph{space deformations}, which deform the ambient
+space and with it any embedded object (lattices, cages, skeletons), and \emph{surface-based}
+methods, which optimise the surface directly (shell-based deformation on polygon meshes,
+volumetric deformation on tetrahedral meshes). Multiscale methods split a shape into a smooth base
+and details, deform the base, and add the details back, for efficiency and detail preservation.
+
+\section{Interpolation}
+
+Space deformations rest on interpolation inside cells. In one dimension, a value between $p_0$ and
+$p_1$ at parameter $t\in[0,1]$ is $\operatorname{lerp}(p_0,p_1,t)=(1-t)p_0+tp_1$. \emph{Bilinear}
+interpolation in a square cell interpolates along one direction and then along the other,
+\begin{equation}
+p(s,t)=(1-s)(1-t)\,p_{00}+s(1-t)\,p_{10}+(1-s)t\,p_{01}+st\,p_{11},
+\end{equation}
+and \emph{trilinear} interpolation in a cube does the same with eight corners. Inside a triangle, a
+point is a unique convex combination of the corners, $\bx=\sum_i\lambda_i\bv_i$ with
+$\lambda_i=A_i/A$, the ratios of the areas of the sub-triangles opposite to each corner
+(\emph{barycentric coordinates}).
+
+\paragraph{Generalized barycentric coordinates.} For a polygon with vertices $\bv_1,\dots,\bv_n$ we
+want weights $w_i(\bx)$ with $\sum_iw_i=1$ and $\sum_iw_i\bv_i=\bx$ (linear precision), that are
+smooth inside, and ideally non-negative. For convex polygons, \emph{Wachspress coordinates}
+\citep{Wachspress1975} are
+\begin{equation}
+w_i(\bx)\propto\frac{A(\bv_{i-1},\bv_i,\bv_{i+1})}{A(\bx,\bv_{i-1},\bv_i)\,A(\bx,\bv_i,\bv_{i+1})},
+\end{equation}
+rational functions that are positive inside convex polygons. For arbitrary polygons (and, in 3D,
+closed triangle meshes \citep{Ju2005}), \emph{mean value coordinates} \citep{Floater2003} are
+\begin{equation}
+w_i(\bx)\propto\frac{\tan(\alpha_{i-1}/2)+\tan(\alpha_i/2)}{\norm{\bv_i-\bx}},
+\end{equation}
+where $\alpha_i$ is the angle at $\bx$ in the triangle $(\bx,\bv_i,\bv_{i+1})$. They are defined and
+smooth everywhere, but become negative in non-convex polygons (\cref{fig:coords}). \emph{Harmonic
+coordinates} \citep{Joshi2007}, obtained by solving Laplace's equation inside the cage, are positive
+everywhere but need a numerical solve.
+
+\fig[0.9\textwidth]{ch13_coordinates.pdf}{The coordinate function of one vertex (red dot) for
+Wachspress and mean value coordinates on a convex pentagon, and for mean value coordinates on a
+non-convex polygon, where the function takes negative values (blue, minimum $-0.174$) behind the
+reflex vertex.}{fig:coords}
+
+\section{Free-form deformation}
+
+Free-form deformation \citep{Sederberg1986} embeds the object in a lattice of control points and
+deforms space: when the user moves the control points, every point of the object moves with the
+cell that contains it. For each vertex, its local coordinates relative to the lattice are computed
+once (for example, a vertex with global coordinates $(25.6,14.7)$ in a grid of unit cells starting at
+$(20,12)$ has local coordinates $(5.6,2.7)$: cell $(5,2)$ and parameters $(0.6,0.7)$); after the
+lattice moves, the vertex is relocated by interpolating the moved corners with the same
+parameters. Trilinear interpolation gives a continuous but only piecewise smooth deformation; the
+original method uses a tensor-product Bernstein polynomial over the whole lattice,
+\begin{equation}
+\bx'(s,t,u)=\sum_{i,j,k}B_i^l(s)\,B_j^m(t)\,B_k^n(u)\,\bp_{ijk},
+\end{equation}
+which is smooth everywhere (\cref{fig:ffd}). The same idea works with triangular cells and
+barycentric coordinates, convex polygonal cells with Wachspress coordinates, and arbitrary
+polygonal or polyhedral \emph{cages} with mean value or harmonic coordinates: the object is
+expressed once in the coordinates of the cage, and editing the few cage vertices deforms it.
+
+\fig[0.7\textwidth]{ch13_ffd.pdf}{Free-form deformation in 2D. A shape is embedded in a $4\times4$
+lattice of control points (left); moving the control points deforms the space and the shape with
+it (right).}{fig:ffd}
+
+\section{Skinning}
+
+\emph{Skinning} is a variant of free-form deformation in which the control structure is placed
+inside the shape: a skeleton of bones connected by joints. Every vertex is attached to one or
+several bones with weights $w_{ij}\ge0$, $\sum_jw_{ij}=1$, usually painted by artists or computed
+automatically from distances or heat diffusion. When the skeleton is animated (by changing the joint
+angles), each bone $j$ has a rigid transformation $\mT_j$ relative to the rest pose, and the
+vertices follow the blend
+\begin{equation}
+\bx'_i=\sum_jw_{ij}\,\mT_j\bx_i ,
+\end{equation}
+known as \emph{linear blend skinning} (LBS) or skeletal subspace deformation (SSD)
+\citep{MagnenatThalmann1988}. It is very fast (it runs on the GPU for every frame of a game), but
+blending rotation matrices linearly does not produce a rotation: near joints the blended matrix
+shrinks, the volume collapses when bending, and twisting by about $180^\circ$ pinches the surface into
+the infamous \emph{candy-wrapper} artefact (\cref{fig:lbs}). Dual quaternion skinning
+\citep{Kavan2008} blends rigid motions in a space where the result remains rigid and avoids it.
+
+\fig[0.7\textwidth]{ch13_lbs.png}{Linear blend skinning of a cylinder with two bones. Left: the
+weight of the upper bone. Centre: bending the joint by $100^\circ$ loses volume on the inner side.
+Right: twisting by $170^\circ$ collapses the surface (candy wrapper).}{fig:lbs}
+
+\section{Surface-based deformation}
+
+The challenge of intuitive deformation is that it requires both a global change and the
+preservation of local detail. Surface-based methods formulate this as the minimisation of an
+energy over the deformed positions, subject to the handle and fixed constraints.
+
+\subsection{Shell-based deformation}
+
+Physically, a thin shell resists \emph{stretching}, a change of the first fundamental form, and
+\emph{bending}, a change of the second fundamental form. Linearising these energies in terms of a
+displacement field $\bd$ gives the simple quadratic energy
+\begin{equation}
+E(\bd)=\int_Sk_s\norm{\grad\bd}^2+k_b\norm{\Lap\bd}^2\dd A ,
+\end{equation}
+whose minimisers satisfy the Euler--Lagrange equation $-k_s\Lap\bd+k_b\Lap^2\bd=\bzero$ in the region
+of interest, with $\bd$ prescribed on the handle and zero on the fixed region. Pure stretching
+($k_b=0$) gives harmonic displacements (membranes, with sharp creases at the constraints); pure
+bending ($k_s=0$) gives biharmonic displacements (thin plates, with smooth transitions). The
+discretisation uses the cotangent Laplacian: $\Lap\approx\mM^{-1}\mC$ and
+$\Lap^2\approx\mM^{-1}\mC\mM^{-1}\mC$, and one sparse linear system is solved per coordinate
+\citep{Botsch2008}.
+
+\subsection{Differential coordinates}
+
+Absolute coordinates are a poor representation for shape-preserving edits: moving one vertex
+changes nothing else, and the local shape around a vertex is encoded only implicitly. The
+\emph{differential} (Laplacian, or delta) coordinates of a vertex encapsulate its local shape
+\citep{Sorkine2006}:
+\begin{equation}
+\bdelta_i=\bx_i-\frac{1}{d_i}\sum_{j\in\mathcal N(i)}\bx_j
+\qquad\text{or, with cotangent weights,}\qquad
+\bdelta_i=\sum_{j\in\mathcal N(i)}C_{ij}(\bx_j-\bx_i)\approx-2H_iA_i\bn_i .
+\end{equation}
+The uniform version is the vector from the average of the neighbours to the vertex; the cotangent
+version is a more geometric weighting, invariant to the triangulation and based on angles, that
+approximates the mean curvature normal (\cref{ch:diffgeo}) and preserves the geometry better. In
+matrix form $\bdelta=\mL\mX$ for all vertices at once.
+
+\paragraph{Reconstruction.} The deltas store the shape but all information about location is lost:
+$\mL$ is not invertible, since adding a constant to all positions does not change $\mL\mX$ (its
+rank is $n-1$ for a connected mesh). To recover the absolute coordinates the mesh must be placed
+somewhere: specify the position of one vertex by appending a row with a one in its column (and
+zeros elsewhere) and its position on the right-hand side. The extended system has a unique
+solution, which reproduces the original mesh.
+
+\subsection{Laplacian editing}
+
+Laplacian editing \citep{Sorkine2004} combines two terms:
+\begin{itemize}
+  \item a \emph{match} term that moves the handle vertices as close as possible to the positions
+  $\bc_k$ specified by the user (and keeps the fixed vertices in place);
+  \item a \emph{regularisation} term that preserves the original local shape (angles, areas,
+  lengths) through the differential coordinates.
+\end{itemize}
+Without regularisation only the handle moves; without the match term the mesh does not move at all;
+with both, the result is a compromise:
+\begin{equation}
+\min_{\mX'}\ \norm{\mL\mX'-\bdelta}^2+w^2\sum_{k\in H\cup F}\norm{\bx'_k-\bc_k}^2 .
+\end{equation}
+Stacking the constraints below $\mL$ as rows of a selection matrix $\mS$ (scaled by $w$), the solution
+satisfies the normal equations
+\begin{equation}
+\bigl(\mL\T\mL+w^2\mS\T\mS\bigr)\mX'=\mL\T\bdelta+w^2\mS\T\mathbf c ,
+\end{equation}
+a sparse symmetric positive definite system factorised once and solved for the three coordinates
+and for every new handle position. The weight $w$ controls how strictly the constraints are
+enforced (\cref{fig:soft}). With large $w$ they act as hard constraints, which can also be imposed
+exactly by eliminating the constrained variables.
+
+\fig[0.95\textwidth]{ch13_soft_weights.png}{Laplacian editing with soft constraints: the tail tip
+of the cat is lifted by $0.2$ while the half of the body farthest from it is fixed. With $w=0.003$ the
+regularisation dominates and the handle stays $0.083$ away from its target; with $w=0.03$ the error is
+$0.002$; with $w=10$ the constraint is met exactly ($8\times10^{-6}$).}{fig:soft}
+
+\paragraph{The rotation problem.} The differential coordinates are vectors expressed in the global
+frame: they are invariant to translation, but not to rotation. When the handle rotates a part of the
+surface, the reconstructed details keep their original orientation instead of rotating with the
+surface, so they are sheared and distorted (\cref{fig:arap}, centre). \citet{Sorkine2004} estimate a
+linearised rotation (plus scaling) per vertex as part of the same least-squares problem; the
+non-linear method below solves the problem properly.
+
+\subsection{As-rigid-as-possible deformation}
+
+\citet{Sorkine2007} ask each one-ring to deform as rigidly as possible: there should be a rotation
+$\mR_i$ per vertex that maps the original edges to the deformed ones,
+\begin{equation}
+E(\mX',\{\mR_i\})=\sum_i\sum_{j\in\mathcal N(i)}w_{ij}\,\bigl\|(\bx'_i-\bx'_j)-\mR_i(\bx_i-\bx_j)\bigr\|^2 ,
+\end{equation}
+with cotangent weights $w_{ij}$. The energy is minimised by alternating two steps:
+\begin{enumerate}
+  \item \textbf{Local step}: for fixed positions, each $\mR_i$ is the best rotation between the
+  original and deformed edges of the one-ring, the Procrustes problem of \cref{ch:icp}: with
+  $\mS_i=\sum_jw_{ij}\be_{ij}\be_{ij}'^{\mathsf T}=\mU_i\mSigma_i\mV_i\T$,
+  $\mR_i=\mV_i\mU_i\T$ (with the determinant correction).
+  \item \textbf{Global step}: for fixed rotations, the positions solve the Poisson-like system
+  \begin{equation}
+  \sum_{j\in\mathcal N(i)}w_{ij}(\bx'_i-\bx'_j)=\sum_{j\in\mathcal N(i)}\frac{w_{ij}}{2}(\mR_i+\mR_j)(\bx_i-\bx_j),
+  \end{equation}
+  that is $-\mC\mX'=\mathbf B$ with the constrained vertices moved to the right-hand side. The matrix
+  does not change between iterations, so it is factorised once.
+\end{enumerate}
+Each step decreases the energy, and a few tens of iterations, initialised with the Laplacian editing
+result, suffice in practice. Details now rotate with the surface (\cref{fig:arap}).
+
+\fig[0.85\textwidth]{ch13_laplacian_arap.png}{A plane with bumps whose left edge is fixed (blue) and
+whose right edge (red) is lifted and moved inwards. Laplacian editing keeps the bumps oriented
+vertically, so they are sheared; as-rigid-as-possible deformation rotates them with the surface and
+preserves their shape.}{fig:arap}
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item Attenuation propagates handle displacements with a falloff; geodesic distances avoid leaks
+  between nearby parts.
+  \item Space deformations interpolate a lattice or cage (trilinear, Bernstein, Wachspress, mean
+  value, harmonic coordinates); skinning blends bone transformations, with volume loss and candy
+  wrappers.
+  \item Shell-based deformation minimises linearised stretching and bending energies, leading to
+  harmonic or biharmonic systems.
+  \item Laplacian editing preserves differential coordinates $\mL\mX$ in the least-squares sense with
+  soft handle constraints; ARAP adds per-vertex rotations, solved by local SVDs and a global Poisson
+  system.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+Show that mean value coordinates reproduce linear functions:
+$\sum_iw_i(\bx)\bv_i=\bx$.
+\end{exercise}
+\begin{exercise}
+Linear blend skinning of a point on the axis of a twisting cylinder: compute the blended position
+for two bones rotated by $0$ and $\theta$ about the axis with weights $\tfrac12$ each, and show that the
+distance of an off-axis point to the axis shrinks by $\abs{\cos(\theta/2)}$.
+\end{exercise}
+\begin{exercise}
+Prove that the Laplacian matrix of a connected mesh has rank $n-1$ and that fixing one vertex makes
+the reconstruction unique.
+\end{exercise}

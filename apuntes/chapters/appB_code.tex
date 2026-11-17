@@ -1,0 +1,106 @@
+\chapter{Notebooks, Code and Reproducibility}\label{app:code}
+
+Everything in these notes can be regenerated from the course repository. This appendix lists the
+companion notebooks, the demo code of the course that the figures reuse, and the scripts that
+produce every figure.
+
+\section{Companion notebooks}
+
+The notebooks in \texttt{notebooks/} are hands-on tutorials (in Spanish) with exercises and
+solutions. They complement the chapters indicated.
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Notebook & Contents \\
+\midrule
+\texttt{Tema02\_Representaciones\_3D} & point clouds, sampling, voxel downsampling, normals and kd-trees;
+meshes, normals, valence, subdivision and simplification; voxelization and volume; SDFs, Booleans and
+marching cubes; parametric surfaces; the map of conversions (\cref{ch:repr}). \\
+\texttt{Tema04\_LaplaceBeltrami\_Suavizado} & uniform and cotangent Laplacians, mass matrix and mean
+curvature normal; spectral basis and low-pass filter; explicit and implicit diffusion; shrinkage and
+volume (\cref{ch:diffgeo,ch:smooth}). \\
+\texttt{Tema06\_4PCS\_RANSAC} & LCP, base width, affine invariants, \texttt{find\_congruent}, the 4PCS
+loop and ICP refinement; RANSAC for planes, spheres and cylinders (\cref{ch:global}). \\
+\texttt{Tema07\_Normales\_y\_Reconstruccion} & total least squares and PCA normals, neighbourhood size,
+MST orientation, outliers; marching squares and tetrahedra, Hoppe, RBF and Poisson reconstruction
+(\cref{ch:recon}). \\
+\texttt{Tema13\_Analisis\_Espectral} & spectrum and ShapeDNA, eigenfunctions and Fourier analysis,
+heat kernel, diffusion distances and GPS, HKS and WKS, matching by descriptors (\cref{ch:spectral}). \\
+\texttt{Tema14\_Shape\_Matching\_Mapas\_Funcionales} & geodesic distortion, functional maps, function
+transfer, pointwise recovery, estimation, spectral ICP and ZoomOut (\cref{ch:fmaps}). \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Course code}
+
+The directory \texttt{codigo/} contains the demos used in the lectures:
+\begin{itemize}
+  \item \texttt{icp\_demo}: point-to-point and point-to-plane ICP with outlier rejection, scenarios with
+  partial overlap and noise, and an interactive viewer (used for \cref{fig:icp-conv,fig:icp-basin});
+  \item \texttt{global-registration} (package \texttt{gr}): Harris 3D, spin images, correspondence
+  grouping and 4PCS (used for \cref{fig:harris,fig:spin});
+  \item \texttt{qem\_demo}: incremental decimation with QEM, shortest-edge and clustering criteria and
+  surface distance metrics (used for \cref{fig:qem-levels,fig:qem-compare});
+  \item \texttt{subdiv\_demo}: Loop, Catmull--Clark and Doo--Sabin subdivision on polygon meshes (used for
+  \cref{fig:subdivision,fig:loop-bunny});
+  \item \texttt{recon\_demo}: surface reconstruction methods;
+  \item \texttt{rep3d}: an interactive application for 3D representations;
+  \item \sloppy stand-alone scripts on Laplacians and filtering (\texttt{laplacian.py},
+  \texttt{mesh\_filtering.py}), parameterization (\texttt{parameterization.py}), spectral descriptors
+  (\texttt{shapeDNA.py}, \texttt{gps.py}, \texttt{heat\_kernel\_signature.py},
+  \texttt{hks\_matching.py}, \texttt{biharmonic.py}) and registration (\texttt{registration.py});
+  \item \texttt{datos/}: the TOSCA cats and horses with precomputed eigenpairs.
+\end{itemize}
+The meshes used in the figures come from \texttt{modelos/} (TOSCA cats and horses in several poses,
+which share their vertex ordering and therefore provide ground-truth correspondences, an elephant and
+ModelNet airplanes) and from the data folders of \texttt{icp\_demo} and \texttt{subdiv\_demo} (bunny,
+armadillo, cow, fandisk, Max Planck, Spot).
+
+\section{Figure scripts}
+
+The scripts in \texttt{apuntes/scripts} use only NumPy, SciPy and Matplotlib for the geometry
+and a small orthographic software renderer, plus Open3D (decimation, ray casting, screened Poisson),
+PyMeshLab (remeshing, hole closing), scikit-image and scikit-learn where noted. The shared library
+\texttt{gp.py} contains mesh loading and normalisation, cotangent and mass matrices, eigensolvers,
+curvature, geodesics (heat method and Dijkstra), marching cubes helpers and the renderer.
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Script & Figures \\
+\midrule
+\texttt{fig\_ch01\_03.py} & gallery, representations, voxels, sampling, kd-tree, Euler, CSG, parametric,
+half-edge and valence (\cref{ch:intro,ch:repr,ch:ds}) \\
+\texttt{fig\_ch04\_05.py} & curves, normals, curvature, principal directions, heat equation, Laplacians,
+spectra, filters and smoothing (\cref{ch:diffgeo,ch:smooth}) \\
+\texttt{fig\_ch06\_08.py} & phase ranging, Gray codes, stereo, scans, ICP, Harris 3D, spin images, 4PCS,
+RANSAC (\cref{ch:acq,ch:icp,ch:global}) \\
+\texttt{fig\_ch09.py} & normals, orientation, outliers, marching squares, reconstruction
+(\cref{ch:recon}); it executes the solution cells of the Tema 7 notebook \\
+\texttt{fig\_ch10\_13.py} & QEM, subdivision, map projections, Tutte and LSCM, remeshing, Lloyd, FFD,
+coordinates, skinning, attenuation, Laplacian editing and ARAP (\cref{ch:ops,ch:param,ch:remesh,ch:deform}) \\
+\texttt{fig\_ch14\_16.py} & pose normalisation, depth buffer, PANORAMA, bag of features, eigenfunctions,
+ShapeDNA, heat, distances, HKS, WKS, GPS, matching, functional maps (\cref{ch:shape,ch:spectral,ch:fmaps}) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{Running.} Install the Python packages listed in \texttt{apuntes/requirements.txt} (on Linux,
+PyMeshLab also needs the system library \texttt{libopengl0}). Each script regenerates all its figures,
+or only the functions named on the command line:
+\begin{lstlisting}[language=bash,numbers=none]
+cd apuntes/scripts
+python fig_ch10_13.py                       # all figures of chapters 10-13
+python fig_ch14_16.py fmap_figures          # only the functional map figures
+\end{lstlisting}
+The spectral scripts cache the eigenpairs in a temporary folder. The heaviest functions (the
+functional map pipeline, Super4PCS, the reconstruction comparison) take one to two minutes each on a
+laptop.
+
+\paragraph{Building the PDF.} The notes are plain \LaTeX{} (\texttt{book} class, \texttt{natbib},
+TikZ, \texttt{algorithm2e}, \texttt{tcolorbox}); \texttt{make} in \texttt{apuntes/} runs
+\texttt{latexmk -pdf main.tex}.

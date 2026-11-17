@@ -1,0 +1,267 @@
+\chapter{Simplification and Subdivision}\label{ch:ops}
+
+A mesh produced by a scanner or by marching cubes often has far more triangles than needed for
+rendering, transmission or simulation; a mesh designed by an artist may have too few to look
+smooth. \emph{Simplification} reduces the number of elements while preserving the shape as well
+as possible, and \emph{subdivision} refines a coarse control mesh towards a smooth limit surface.
+This chapter covers both, following Tema 8.
+
+\section{Why piecewise linear surfaces}
+
+In one dimension, approximating a function $f$ from samples at spacing $h$ by linear interpolation
+has error $O(h^2)$, and interpolation by a polynomial of degree $p$ has error
+$\frac{f^{(p+1)}(\xi)}{(p+1)!}\prod_i(x-x_i)=O(h^{p+1})$ by the generalised mean value theorem. Smooth
+high-order representations are therefore more accurate per sample, which is the argument for
+NURBS in CAD: they are inherently smooth and offer intuitive control through a lattice of control
+points. However, a NURBS patch is limited to a grid-shaped domain and has the topology of a sheet,
+a cylinder or a torus, so complex shapes need many patches with special rules to join them, and
+deformations produce artefacts at the seams. Triangle meshes are inherently discrete, but need no
+rules to join pieces, represent arbitrary topology, can be refined wherever resolution is needed,
+can be made smooth by subdivision and are easy to render. Their approximation error is $O(h^2)$:
+doubling the resolution in each direction (four times the vertices) reduces the error four times.
+Triangles are the simplest linear element, are easy to reconstruct from point clouds and flexible
+under deformation; quad meshes are preferred in animation and subdivision modelling but usually
+require human intervention to build.
+
+\section{Mesh simplification}
+
+\subsection{Strategies and error metrics}
+
+Three families of algorithms exist:
+\begin{itemize}
+  \item \textbf{Vertex clustering} \citep{Rossignac1993}: overlay a grid, merge all vertices in a
+  cell into a representative, and remove degenerate triangles. It is fast, linear time and robust
+  to any input, but the result depends on the grid, ignores the shape, and may change the
+  topology.
+  \item \textbf{Incremental decimation}: repeatedly remove the element whose removal causes the
+  smallest error, by vertex removal and re-triangulation of the hole \citep{Schroeder1992} or,
+  most commonly, by edge collapse.
+  \item \textbf{Resampling}: compute a new mesh with the desired density (remeshing,
+  \cref{ch:remesh}).
+\end{itemize}
+The quality of a simplified mesh $\M'$ is measured by its distance to the original $\M$, usually
+the symmetric Hausdorff distance
+$d_H(\M,\M')=\max\bigl(\sup_{\bx\in\M}d(\bx,\M'),\sup_{\bx\in\M'}d(\bx,\M)\bigr)$ or the mean
+distance, estimated by dense sampling \citep{Cignoni1998}.
+
+\subsection{Incremental decimation with edge collapses}
+
+All incremental methods share the structure
+\begin{enumerate}
+  \item evaluate the local error of every removable element;
+  \item while the target size is not reached: select the element with the smallest error, remove
+  it, and update the error of the elements around it.
+\end{enumerate}
+With half-edge collapses ($\bx_1\to\bx_2$) the surviving vertex keeps its position; with full edge
+collapses the merged vertex $\bar\bx$ may be placed anywhere, which allows better approximations.
+Contracting edges in random order, without a geometric criterion, quickly destroys the shape; the
+criterion is what matters.
+
+\subsection{Quadric error metrics}
+
+\Citet{Garland1997} measure the error of a vertex position as its squared distance to a set of
+planes. A plane $ax+by+cz+d=0$ with unit normal $(a,b,c)$ is written $\bp=(a,b,c,d)\T$, and a point
+in homogeneous coordinates $\bv=(x,y,z,1)\T$ has squared distance
+\begin{equation}
+(\bp\T\bv)^2=\bv\T(\bp\bp\T)\bv=\bv\T\mK_\bp\bv ,\qquad \mK_\bp=\bp\bp\T .
+\end{equation}
+Each vertex is associated with the planes of its incident triangles, and its \emph{quadric} is
+the $4\times4$ symmetric matrix $\mQ_v=\sum_\bp\mK_\bp$ (optionally weighted by the triangle
+areas). The error of placing the vertex at $\bv$ is $\Delta(\bv)=\bv\T\mQ_v\bv$, the sum of squared
+distances to its planes; it is zero at the original position.
+
+When an edge $(v_1,v_2)$ is collapsed into $\bar v$, the new vertex inherits the union of the planes,
+approximated by $\bar\mQ=\mQ_1+\mQ_2$, and its position minimises
+$\Delta(\bar\bv)=\bar\bv\T\bar\mQ\bar\bv$. The gradient condition
+$\partial\Delta/\partial x=\partial\Delta/\partial y=\partial\Delta/\partial z=0$ is linear:
+\begin{equation}
+\begin{pmatrix}q_{11}&q_{12}&q_{13}&q_{14}\\q_{12}&q_{22}&q_{23}&q_{24}\\q_{13}&q_{23}&q_{33}&q_{34}\\0&0&0&1\end{pmatrix}\bar\bv=
+\begin{pmatrix}0\\0\\0\\1\end{pmatrix}
+\quad\Longleftrightarrow\quad \mA\bar\bx=-\bb ,
+\end{equation}
+where $\mA$ is the upper-left $3\times3$ block of $\bar\mQ$ and $\bb$ the first three entries of its
+last column. If $\mA$ is invertible, $\bar\bx=-\mA^{-1}\bb$. If it is singular (the planes do not
+determine a point, for instance on flat or cylindrical regions), choose the best among $\bx_1$,
+$\bx_2$ and their midpoint, or use the pseudo-inverse. The level sets of $\Delta$ are ellipsoids
+whose shape reveals the local geometry: thin along the normal, elongated along flat directions.
+
+\begin{example}{Corners and flat regions}{qem}
+At the corner of a cube the vertex has the three planes $x=1$, $y=1$, $z=1$. Then
+$\mA=\mI$ and $\bb=-(1,1,1)\T$, so the optimal position is the corner itself with zero error:
+collapsing an edge into a corner keeps the corner exactly. For a vertex in the middle of a face
+$z=1$, all planes coincide, $\mA=\diag(0,0,1)$ is singular, and any point of the plane has zero
+error: flat regions can be decimated freely.
+\end{example}
+
+\Cref{alg:qem} summarises the method. A priority queue keyed by the collapse cost gives
+$O(n\log n)$ complexity, and each vertex stores only the ten distinct entries of its quadric. Before
+performing a collapse, legality checks reject those that would violate the link condition
+(\cref{ch:ds}), flip the normal of a neighbouring triangle, or create degenerate triangles. Open
+boundaries are preserved by adding, for each boundary edge, a heavily weighted plane perpendicular
+to the surface through that edge.
+
+\begin{algorithm}[tbp]
+\caption{Simplification with quadric error metrics \citep{Garland1997}.}\label{alg:qem}
+\Input{mesh $\M$, target number of faces $F^\star$}
+compute $\mQ_v$ for every vertex\;
+\ForEach{edge $(v_1,v_2)$}{compute $\bar\bx$ minimising $\bar\bv\T(\mQ_1+\mQ_2)\bar\bv$ and push the edge with cost $\Delta(\bar\bv)$ into a priority queue\;}
+\While{$F>F^\star$}{
+  pop the edge of smallest cost; skip it if it is stale or the collapse is illegal\;
+  collapse it, place the new vertex at $\bar\bx$ and set its quadric to $\mQ_1+\mQ_2$\;
+  recompute the cost of the edges incident to the new vertex and update the queue\;
+}
+\end{algorithm}
+
+\fig{ch10_qem_levels.png}{QEM simplification of the bunny from 20\,000 faces to 2000, 500 and
+150. Even at 150 faces the ears and the overall shape survive, because collapses happen first
+where the planes agree.}{fig:qem-levels}
+
+\fig{ch10_qem_compare.png}{Comparison of simplification criteria on the cow. Left: mean distance
+to the original mesh (per mille of the bounding-box diagonal) against the number of faces. Right:
+results with about 200 faces (QEM and shortest edge first exactly 200, vertex clustering 225 with
+the closest grid size). QEM is about three times more accurate than the other two criteria, which
+behave similarly; at 200 faces it still preserves the legs, the ears and the head, which the others
+distort.}{fig:qem-compare}
+
+\paragraph{Progressive meshes.} Recording the sequence of collapses yields a multiresolution
+representation: the coarsest mesh plus the inverse operations (vertex splits), which can be
+streamed and replayed to any level of detail \citep{Hoppe1996}.
+
+\section{Subdivision}
+
+Subdivision generates a smooth surface as the limit of a sequence of meshes. Each step
+\begin{enumerate}
+  \item \textbf{refines} the connectivity, splitting faces (\emph{primal} schemes) or replacing
+  vertices by faces (\emph{dual} schemes);
+  \item \textbf{smooths} the geometry, computing new positions as fixed affine combinations of
+  nearby old positions (the \emph{masks} or rules).
+\end{enumerate}
+\emph{Approximating} schemes move the old vertices, \emph{interpolating} schemes keep them. The
+limit surface is smooth everywhere, while the mesh retains arbitrary topology: subdivision offers
+the trade-off between the smoothness of splines and the flexibility of meshes \citep{Zorin2000}.
+
+\subsection{Curves}
+
+\paragraph{Chaikin's algorithm} \citep{Chaikin1974} cuts corners: each edge $(\bp_i,\bp_{i+1})$ is
+replaced by the two points
+\begin{equation}
+\bq_i=\tfrac34\bp_i+\tfrac14\bp_{i+1},\qquad \br_i=\tfrac14\bp_i+\tfrac34\bp_{i+1},
+\end{equation}
+so an open polygon of $n$ points becomes one of $2(n-1)$ points. The limit is the uniform quadratic
+B-spline of the control polygon, which is $C^1$.
+
+\paragraph{Cubic B-splines.} Inserting edge midpoints and moving the old vertices,
+\begin{equation}
+\bp'_{2i+1}=\tfrac12(\bp_i+\bp_{i+1}),\qquad \bp'_{2i}=\tfrac18(\bp_{i-1}+6\bp_i+\bp_{i+1}),
+\end{equation}
+converges to the uniform cubic B-spline, which is $C^2$.
+
+\paragraph{The 4-point scheme} \citep{Dyn1987} interpolates: old points are kept and each new point
+is
+\begin{equation}
+\bp'_{2i+1}=\tfrac{9}{16}(\bp_i+\bp_{i+1})-\tfrac1{16}(\bp_{i-1}+\bp_{i+2}),
+\end{equation}
+with a $C^1$ limit (\cref{fig:curves}).
+
+\fig[0.9\textwidth]{ch10_curves.pdf}{Curve subdivision of a closed control polygon (grey). Chaikin
+and the cubic B-spline scheme approximate the polygon and converge to smooth curves inside it;
+the 4-point scheme interpolates every control point.}{fig:curves}
+
+\subsection{Surfaces}
+
+\paragraph{Loop subdivision} \citep{Loop1987} works on triangle meshes. Every triangle is split into
+four by inserting a vertex on each edge (primal $1\to4$ split). For an interior edge with endpoints
+$\bv_0,\bv_1$ and opposite vertices $\bv_2,\bv_3$, the new \emph{edge point} is
+\begin{equation}
+\be=\tfrac38(\bv_0+\bv_1)+\tfrac18(\bv_2+\bv_3),
+\end{equation}
+and an old vertex $\bv$ of valence $n$ with neighbours $\bv_j$ moves to the \emph{vertex point}
+\begin{equation}
+\bv'=(1-n\beta)\bv+\beta\sum_{j=1}^n\bv_j,\qquad
+\beta=\frac1n\Bigl(\frac58-\bigl(\tfrac38+\tfrac14\cos\tfrac{2\pi}{n}\bigr)^2\Bigr) .
+\end{equation}
+For $n=6$, $\beta=1/16$ and the scheme reproduces quartic box splines, which are $C^2$; at
+extraordinary vertices ($n\neq6$) the limit is $C^1$. A simpler choice is $\beta=3/16$ for $n=3$ and
+$\beta=3/(8n)$ otherwise. Boundary edges and vertices follow the cubic B-spline curve rules, so
+boundaries converge to cubic curves.
+
+\paragraph{Catmull--Clark subdivision} \citep{Catmull1978} works on arbitrary polygon meshes and
+generalises bicubic B-splines. One step creates
+\begin{itemize}
+  \item a \emph{face point} for each face: the average of its vertices;
+  \item an \emph{edge point} for each edge: the average of its two endpoints and the two face points
+  of its adjacent faces;
+  \item a new position for each old vertex of valence $n$:
+  $\bv'=\dfrac{\mathbf F+2\mathbf R+(n-3)\bv}{n}$, where $\mathbf F$ is the average of the adjacent
+  face points and $\mathbf R$ the average of the midpoints of the incident edges.
+\end{itemize}
+Each face is connected to its edge points and face point, so after one step every face is a
+quadrilateral. The limit is $C^2$ except at extraordinary vertices (valence $\neq4$), where it is
+$C^1$. Catmull--Clark surfaces are the standard of film and animation modelling.
+
+\paragraph{Doo--Sabin subdivision} \citep{Doo1978} is a dual scheme that generalises biquadratic
+B-splines. For each face and each of its vertices a new point is created, for example the average
+of the vertex, the midpoints of its two edges in the face and the face centroid. New faces are then
+formed of three kinds: a shrunken copy of every face, a quadrilateral for every edge, and an
+$n$-gon for every vertex of valence $n$. The limit is $C^1$.
+
+\begin{table}[tbp]
+\centering\small
+\begin{tabular}{@{}lllll@{}}
+\toprule
+Scheme & Mesh & Type & Behaviour & Smoothness (regular/extraord.) \\
+\midrule
+Chaikin & curves & dual & approximating & $C^1$ \\
+Cubic B-spline & curves & primal & approximating & $C^2$ \\
+4-point & curves & primal & interpolating & $C^1$ \\
+Loop & triangles & primal & approximating & $C^2$ / $C^1$ \\
+Catmull--Clark & polygons (quads) & primal & approximating & $C^2$ / $C^1$ \\
+Doo--Sabin & polygons & dual & approximating & $C^1$ / $C^1$ \\
+Butterfly & triangles & primal & interpolating & $C^1$ (modified) \\
+\bottomrule
+\end{tabular}
+\caption{Common subdivision schemes.}
+\label{tab:subdiv}
+\end{table}
+
+\fig[0.85\textwidth]{ch10_subdivision.png}{Subdivision of a cube with Catmull--Clark, Doo--Sabin and
+Loop (applied to the triangulated cube) at levels 0, 1, 2 and 4. All three converge to rounded
+shapes; Loop's limit is less symmetric because the triangulation of the cube is not
+symmetric.}{fig:subdivision}
+
+\fig{ch10_loop_bunny.png}{Loop subdivision of a bunny with 399 faces. Each level multiplies the number of
+faces by four; the limit is smooth but, since the scheme approximates, it shrinks slightly away from
+the control mesh.}{fig:loop-bunny}
+
+\paragraph{Limit positions and evaluation.} The rules are linear, so the vertices near an
+extraordinary vertex are transformed by a fixed \emph{subdivision matrix} at every step. Its
+eigen-decomposition gives the limit position (the left eigenvector of the dominant eigenvalue
+$1$ applied to the control points) and the tangent plane, and determines the smoothness of the
+limit surface; this analysis is how the weights $\beta$ above were chosen.
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item Incremental decimation collapses the edge of smallest error first; QEM measures the
+  squared distance to the planes of the original neighbourhood with a $4\times4$ quadric
+  $\mQ=\sum\bp\bp\T$ and places the new vertex by solving a $3\times3$ system.
+  \item Collapses must preserve the topology and avoid normal flips; quadrics add, so updates are
+  cheap.
+  \item Subdivision alternates refinement and smoothing; Loop (triangles), Catmull--Clark (quads)
+  and Doo--Sabin (dual) produce $C^1$ or $C^2$ limit surfaces from coarse control meshes.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+Show that the quadric error of a vertex is invariant under the choice of sign of the plane
+normals, and that summing quadrics of coplanar faces counts the same plane several times. How
+does area weighting help?
+\end{exercise}
+\begin{exercise}
+Verify that Loop's $\beta$ equals $1/16$ for $n=6$ and that the vertex rule then coincides with the
+regular quartic box-spline mask.
+\end{exercise}
+\begin{exercise}
+Count vertices, edges and faces after one Catmull--Clark step on a mesh with $V$, $E$, $F$ and check
+that the Euler characteristic is preserved.
+\end{exercise}

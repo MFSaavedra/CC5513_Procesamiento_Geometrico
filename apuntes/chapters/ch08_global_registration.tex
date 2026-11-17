@@ -1,0 +1,339 @@
+\chapter{Global Registration}\label{ch:global}
+
+ICP needs a good initial alignment, which is often not available: scans taken by hand, objects
+placed arbitrarily in a scene, or fragments of a broken artefact can be related by any rotation.
+\emph{Global registration} finds the alignment without assuming that corresponding points are
+close. Since proximity can no longer be used to find correspondences, we need more information
+than the raw coordinates. Two strategies are covered, following Tema 6 and the companion notebook:
+feature-based registration, which describes points by their local geometry and matches the
+descriptions, and featureless registration with 4-point congruent sets (4PCS), a RANSAC-type
+search that exploits affine invariants. The chapter ends with RANSAC for fitting geometric
+primitives, which shares the same randomised machinery.
+
+\section{The feature-based pipeline}
+
+\begin{figure}[tbp]
+\centering
+\begin{tikzpicture}[node distance=5mm, every node/.style={font=\small},
+  box/.style={draw, rounded corners=2pt, fill=MidnightBlue!8, minimum height=9mm, text width=24mm, align=center},
+  ar/.style={-{Stealth[length=2.2mm]}, thick}]
+\node[box] (s) {point sampling\\ \footnotesize (Harris 3D)};
+\node[box, right=of s] (d) {point description\\ \footnotesize (spin images)};
+\node[box, right=of d] (m) {point matching\\ \footnotesize (similarity, filtering)};
+\node[box, right=of m] (t) {find transformation\\ \footnotesize (grouping, ICP)};
+\draw[ar] (s) -- (d); \draw[ar] (d) -- (m); \draw[ar] (m) -- (t);
+\end{tikzpicture}
+\caption{The global registration pipeline based on local features.}
+\label{fig:gr-pipeline}
+\end{figure}
+
+The pipeline of \cref{fig:gr-pipeline} has four stages: select a small set of distinctive points
+on each shape, describe the neighbourhood of each with a descriptor invariant to rigid motions,
+match descriptors between the shapes, and estimate the transformation from the matches while
+discarding wrong ones. The final alignment is refined with ICP.
+
+\section{Interest points: Harris 3D}
+
+In images, the Harris detector \citep{Harris1988} finds corners by measuring how much a patch
+changes when shifted. For an image $I$, the weighted auto-correlation of a shift $(\Delta x,\Delta
+y)$ is, to first order,
+\begin{equation}
+c(\Delta x,\Delta y)=\sum_{(x,y)}w(x,y)\bigl(I(x+\Delta x,y+\Delta y)-I(x,y)\bigr)^2\approx
+(\Delta x,\Delta y)\,\mE\,(\Delta x,\Delta y)\T ,
+\end{equation}
+\begin{equation}
+\mE=\sum_{(x,y)}w(x,y)\begin{pmatrix}I_x^2&I_xI_y\\I_xI_y&I_y^2\end{pmatrix},
+\end{equation}
+with a Gaussian window $w$. The local structure is determined by the eigenvalues of $\mE$: both
+small in flat regions, one large along an edge, both large at a corner. The Harris operator
+$h=\det\mE-k(\tr\mE)^2$ (with $k\approx0.04$) is large only when both eigenvalues are large.
+
+Extending this to surfaces raises two questions: how to define neighbourhoods and how to compute
+derivatives. Harris 3D \citep{Sipiran2011} answers them as follows, for every vertex $v$:
+\begin{enumerate}
+  \item \textbf{Neighbourhood}: collect the vertices within $k$ rings (or within a radius that
+  adapts to the local sampling density).
+  \item \textbf{Normalisation}: translate the neighbourhood so that its centroid is at the origin and
+  rotate it with principal component analysis, so that the eigenvector of smallest variance (the
+  normal direction) becomes the $z$ axis; translate again so that $v$ is the origin.
+  \item \textbf{Fitting}: fit a quadratic surface
+  $z=f(x,y)=\tfrac{p_1}{2}x^2+p_2xy+\tfrac{p_3}{2}y^2+p_4x+p_5y+p_6$ by least squares. The surface
+  now plays the role of an image.
+  \item \textbf{Harris matrix}: the derivatives of $f$ are linear,
+  $f_x=p_1x+p_2y+p_4$ and $f_y=p_2x+p_3y+p_5$, so the Gaussian-weighted integrals that form $\mE$
+  have a closed form. With a normalised Gaussian of variance $\sigma^2$ centred at $v$,
+  \begin{equation}
+  \mE=\begin{pmatrix}A&C\\C&B\end{pmatrix},\quad
+  \begin{aligned}
+  A&=p_4^2+\sigma^2(p_1^2+p_2^2),\\ B&=p_5^2+\sigma^2(p_2^2+p_3^2),\\ C&=p_4p_5+\sigma^2(p_1p_2+p_2p_3).
+  \end{aligned}
+  \end{equation}
+  The integration smooths the local changes of the geometry, which makes the detector robust to
+  noise and tessellation.
+  \item \textbf{Response and selection}: compute $h(v)=\det\mE-k(\tr\mE)^2$, keep the vertices that
+  are local maxima of $h$ in their neighbourhood, and select either a fixed fraction with the
+  highest response or a set spread over the surface by clustering (non-maximum suppression within a
+  radius).
+\end{enumerate}
+The method works on meshes and point clouds. \Cref{fig:harris} shows the detected points.
+
+\fig[0.85\textwidth]{ch08_harris.png}{Harris 3D response (red positive, blue negative) and the 60
+selected interest points (yellow), with non-maximum suppression within $4\%$ of the bounding-box
+diagonal. Interest points concentrate at extremities, fingers and sharp features, which are
+distinctive and repeatable across scans.}{fig:harris}
+
+Interest points are differential entities, so noise and outliers degrade them and produce wrong
+correspondences. Descriptors based on integrals (integral invariants, histograms) are more robust,
+and when noise, outliers and holes are all severe, featureless methods are preferable.
+
+\section{Descriptors: spin images}
+
+A local descriptor summarises the neighbourhood of a point in a vector that does not change under
+rigid motions, so that corresponding points on two shapes have similar descriptors.
+\emph{Spin images} \citep{Johnson1999} describe the distribution of surface points around an
+oriented point $(\bp,\bn)$. Any point $\bx$ is expressed in the cylindrical coordinates of the local
+basis formed by $\bp$, the normal $\bn$ and the tangent plane:
+\begin{equation}
+\alpha=\sqrt{\norm{\bx-\bp}^2-\bigl(\bn\cdot(\bx-\bp)\bigr)^2},\qquad \beta=\bn\cdot(\bx-\bp),
+\end{equation}
+the distance to the normal line and the signed height above the tangent plane. The angle around the
+normal is discarded, which makes the pair $(\alpha,\beta)$ invariant to rotations about $\bn$:
+imagine a sheet that spins around the normal and accumulates the points it sweeps. The spin image
+is the 2D histogram of $(\alpha,\beta)$ over the neighbouring points, with a bin size comparable to
+the sampling resolution and a support limited in $\alpha$, $\beta$, and in the angle between normals
+to reduce clutter (\cref{fig:spin}). Other popular descriptors are fast point feature histograms
+(FPFH) \citep{Rusu2009}, which histogram angles between normals of neighbouring pairs, and learned
+descriptors.
+
+\fig[0.85\textwidth]{ch08_spin.png}{Spin images of three points of a bunny scan (ear, neck and
+flank). Each image is the histogram of the $(\alpha,\beta)$ coordinates of the neighbouring points,
+with $\alpha$ horizontal and $\beta$ vertical; darker bins contain more points. Different local
+shapes give clearly different images.}{fig:spin}
+
+\section{Matching and filtering}
+
+Two spin images $P$ and $Q$ are compared by the linear correlation coefficient over the $N$ bins
+where both have data,
+\begin{equation}
+R(P,Q)=\frac{N\sum p_iq_i-\sum p_i\sum q_i}{\sqrt{\bigl(N\sum p_i^2-(\sum p_i)^2\bigr)\bigl(N\sum q_i^2-(\sum q_i)^2\bigr)}} .
+\end{equation}
+A correlation computed from few bins is unreliable, so the similarity accounts for its variance,
+\begin{equation}
+S(P,Q)=\bigl(\atanh R(P,Q)\bigr)^2-\lambda\frac{1}{N-3},
+\end{equation}
+where $\atanh$ makes the distribution of $R$ approximately normal with variance $1/(N-3)$, and
+$\lambda$ weighs the penalty for small overlaps. This avoids a dependence on the density of the
+data. For each sampled point of the scene, the most similar points of the model are retrieved, and
+only correspondences with the highest similarity are kept.
+
+Many correspondences are still wrong, so they are filtered in two steps:
+\begin{enumerate}
+  \item discard correspondences whose similarity is less than half of the maximum similarity;
+  \item discard correspondences that are not geometrically consistent with enough others.
+\end{enumerate}
+For two correspondences $c_1=(\bs_1,\mathbf{m}_1)$ and $c_2=(\bs_2,\mathbf{m}_2)$ (scene and model points with
+normals), let $S_{\mathbf{m}_2}(\mathbf{m}_1)$ denote the spin coordinates $(\alpha,\beta)$ of $\mathbf{m}_1$ in the
+basis of the oriented point $\mathbf{m}_2$. A rigid motion preserves these coordinates, so consistent
+correspondences satisfy $S_{\mathbf{m}_2}(\mathbf{m}_1)\approx S_{\bs_2}(\bs_1)$. The geometric consistency
+distance
+\begin{equation}
+d_{gc}(c_1,c_2)=\frac{\norm{S_{\mathbf{m}_2}(\mathbf{m}_1)-S_{\bs_2}(\bs_1)}}{\tfrac12\bigl(\norm{S_{\mathbf{m}_2}(\mathbf{m}_1)}+\norm{S_{\bs_2}(\bs_1)}\bigr)},\qquad
+D_{gc}(c_1,c_2)=\max\bigl(d_{gc}(c_1,c_2),d_{gc}(c_2,c_1)\bigr)
+\end{equation}
+involves both positions and normals and is small when the two correspondences are consistent.
+Correspondences that are consistent ($D_{gc}$ below a threshold) with fewer than a quarter of the
+list are discarded.
+
+\section{Finding the transformation}
+
+The surviving correspondences are grouped into mutually consistent sets. A weighted measure
+favours correspondences that are far apart (they constrain the transformation better):
+\begin{equation}
+w_{gc}(c_1,c_2)=\frac{d_{gc}(c_1,c_2)}{1-\exp\!\bigl(-(\norm{S_{\mathbf{m}_2}(\mathbf{m}_1)}+\norm{S_{\bs_2}(\bs_1)})/(2\gamma)\bigr)},
+\end{equation}
+\begin{equation}
+W_{gc}(c,G)=\max_{c'\in G}\max\bigl(w_{gc}(c,c'),w_{gc}(c',c)\bigr),
+\end{equation}
+where $W_{gc}(c,G)$ measures the consistency between a correspondence and a group $G$. For each
+correspondence a group is initialised with it; the correspondence that minimises $W_{gc}(c,G)$ is
+added while its value stays below a threshold, and the process continues until no more
+correspondences can be added. For each group, the rigid transformation that minimises
+$\sum\norm{\mR\bs_i+\bt-\mathbf{m}_i}^2$ is computed in closed form (\cref{ch:icp}), the transformations
+are verified by the fraction of scene points that land on the model, and the best one is refined
+with ICP.
+
+\section{Featureless registration: 4PCS}
+
+\subsection{From triplets to coplanar 4-point bases}
+
+A key observation is that a pair of corresponding triplets of non-collinear points suffices to
+define a unique rigid transformation. A RANSAC approach therefore picks a triplet in $P$, tries
+every triplet of $Q$ as its correspondent, computes the transformation and checks how many points it
+aligns. With $n$ points there are $O(n^3)$ candidate triplets per base, which is prohibitive.
+\Citet{Aiger2008} showed that \emph{coplanar 4-point bases} can be matched much faster, in about
+$O(n^2)$, because they have affine invariants that can be indexed.
+
+\subsection{Measuring an alignment: the LCP}
+
+Without correspondences, the quality of a transformation $T$ is the \emph{largest common
+pointset} measure: the fraction of points of $P$ that, after transformation, have a point of $Q$
+within distance $\delta$,
+\begin{equation}
+\mathrm{LCP}(T)=\frac{1}{\abs{P}}\,\Bigl|\bigl\{\bp\in P:\min_{\bq\in Q}\norm{T(\bp)-\bq}\le\delta\bigr\}\Bigr| .
+\end{equation}
+It is robust to outliers and partial overlap, because it counts agreements instead of summing
+errors, and it is evaluated with a kd-tree on $Q$ (often first on a random subset, then on all the
+points for the best candidates).
+
+\subsection{Affine invariants of a coplanar base}
+
+Let $B=\{\ba,\bb,\bc,\bd\}$ be four coplanar points such that the segments $\ba\bb$ and $\bc\bd$
+intersect at a point $\be$ (\cref{fig:4pcs-inv}). The ratios
+\begin{equation}
+r_1=\frac{\norm{\ba-\be}}{\norm{\ba-\bb}},\qquad r_2=\frac{\norm{\bc-\be}}{\norm{\bc-\bd}}
+\end{equation}
+are preserved by every affine transformation, and in particular by rigid motions. Together with the
+lengths $d_1=\norm{\ba-\bb}$ and $d_2=\norm{\bc-\bd}$ (preserved by rigid motions) they
+characterise the base. Real data is never exactly coplanar, so the base is chosen
+\emph{approximately} coplanar, with the intersection taken at the closest points of the two
+lines.
+
+\subsection{Finding congruent sets with intermediate points}
+
+To find all 4-point sets of $Q$ congruent to $B$ (\texttt{FindCongruent}):
+\begin{enumerate}
+  \item collect the pairs $(\bq_i,\bq_j)$ of $Q$ whose distance is $d_1\pm\varepsilon$, and the pairs
+  whose distance is $d_2\pm\varepsilon$ (both orderings of each pair);
+  \item for every pair of the first set compute the \emph{intermediate point}
+  $\be_1=\bq_i+r_1(\bq_j-\bq_i)$, and for every pair of the second set
+  $\be_2=\bq_i+r_2(\bq_j-\bq_i)$;
+  \item a pair of the first set and a pair of the second set whose intermediate points coincide,
+  $\be_1\approx\be_2$, form a 4-point set with the same invariants as $B$; such coincidences are
+  found with a kd-tree range search on the $\be_1$ points.
+\end{enumerate}
+When $d_1\approx d_2$ the two sets of pairs are the same, and both assignments of the invariants
+must be tried. The candidate sets are then filtered by the angle between the segments and,
+when normals are available, by the angles between normals, which are cheap and remove most false
+candidates.
+
+\fig[0.85\textwidth]{ch08_4pcs_invariants.pdf}{4PCS invariants. Left: a coplanar base whose
+diagonals intersect at $\be$, with ratios $r_1=0.54$ and $r_2=0.48$. Right: in the target, the
+intermediate points $\be_1$ of the pairs at distance $d_1$ (blue) and $\be_2$ of the pairs at
+distance $d_2$ (orange); a coincidence of a blue and an orange point (red) reveals a congruent
+4-point set.}{fig:4pcs-inv}
+
+\subsection{The 4PCS loop}
+
+\Cref{alg:4pcs} summarises the method. Each iteration selects a base in $P$, finds its congruent
+sets in $Q$, and scores the induced transformations with the LCP. The base selection
+(\texttt{SelectCoplanarBase}) looks like a detail but decides the success of the method: the base
+must be \emph{wide}, because the rotation error caused by a perturbation $\varepsilon$ of the points
+behaves like $\Delta\theta\sim\varepsilon/D$ for a base of diameter $D$ (\cref{fig:4pcs-base}),
+yet it must lie in the overlap of the two shapes, which shrinks as the base grows. If a fraction $f$
+of the points of $P$ lies in the overlap, a random base of $N$ points falls entirely in it with
+probability $f^N$, so the number of iterations needed to succeed with probability $p_s$ is
+\begin{equation}
+L=\frac{\log(1-p_s)}{\log(1-f^N)} .
+\end{equation}
+4PCS returns a coarse pose; ICP finishes it (\cref{fig:4pcs-result}).
+
+\begin{algorithm}[tbp]
+\caption{4PCS global registration \citep{Aiger2008}.}\label{alg:4pcs}
+\Input{point sets $P$, $Q$; overlap estimate $f$; tolerance $\delta$}
+\Output{rigid transformation $T^\star$}
+$T^\star\gets\mI$; $s^\star\gets0$\;
+\For{$L$ iterations}{
+  $B\gets$ \texttt{SelectCoplanarBase}$(P)$ (wide, approximately coplanar)\;
+  compute $d_1,d_2,r_1,r_2$ of $B$\;
+  $\mathcal U\gets$ \texttt{FindCongruent}$(Q,d_1,d_2,r_1,r_2)$\;
+  \ForEach{$U\in\mathcal U$}{
+    $T\gets$ best rigid fit of $B$ to $U$ (\cref{ch:icp})\;
+    \lIf{$\mathrm{LCP}(T)>s^\star$}{$T^\star\gets T$; $s^\star\gets\mathrm{LCP}(T)$}
+  }
+}
+refine $T^\star$ with ICP\;
+\end{algorithm}
+
+\fig[0.85\textwidth]{ch08_base_iterations.pdf}{Left: median rotation error of the transformation
+estimated from a perturbed base, against the base diameter; the error decreases as $1/D$. Right:
+number of iterations $L$ needed to draw at least one base inside the overlap with probability
+$p_s=0.99$, for bases of $N=3$ and $N=4$ points.}{fig:4pcs-base}
+
+\paragraph{Super4PCS.} The bottleneck of 4PCS is the extraction of all pairs at a given distance,
+quadratic in the number of points. Super4PCS \citep{Mellado2014} finds them with a rasterisation of
+spheres of radius $d$ around the points in a grid, and indexes the pairs by their direction to
+discard incompatible angles early. The complexity becomes linear in the number of points plus the
+number of candidate sets, which makes the method practical for large scans.
+
+\fig[0.85\textwidth]{ch08_4pcs_result.png}{Global registration of two partial bunny scans in
+arbitrary relative pose. Super4PCS finds an alignment with $\mathrm{LCP}=0.81$ and a rotation error
+of $1.8^\circ$; ICP refines it to $0.13^\circ$.}{fig:4pcs-result}
+
+The notebook discusses the regime for which 4PCS was designed: noisy scans with moderate overlap
+and no reliable features. Its limitations, as stated by the authors, are the dependence on the
+overlap estimate and the tolerance $\delta$, and degenerate geometry (planar or symmetric scenes)
+where many wrong transformations obtain a high LCP.
+
+\section{RANSAC for primitive fitting}
+
+The random sample consensus paradigm \citep{Fischler1981} behind 4PCS also solves a different
+problem: decomposing a point cloud of a man-made scene into geometric primitives. Each primitive
+type has a \emph{minimal set} of points (and normals) that determines it:
+\begin{itemize}
+  \item \textbf{plane}: three points, or one point and its normal;
+  \item \textbf{sphere}: two points with normals, since the centre lies on both normal lines (the
+  midpoint of their closest points), and the radius is the mean distance to the centre;
+  \item \textbf{cylinder}: two points with normals; the axis direction is
+  $\bn_1\times\bn_2$, the axis passes through the intersection of the two normal lines projected on
+  the plane orthogonal to the axis, and the radius is the distance of the points to the axis.
+\end{itemize}
+The engine repeats: draw a minimal set, fit a candidate, count its inliers (points within
+distance $\varepsilon$ whose normals deviate less than $\alpha$ from the primitive's normal), and
+keep the best. The iteration budget follows the same formula as for 4PCS, with $f$ the inlier
+fraction of the primitive and $N$ the size of the minimal set. Safeguards against degenerate
+samples (nearly parallel normals, collinear points) are essential. Several primitives are
+extracted sequentially: detect the best one, remove its inliers, and repeat while the best
+primitive has enough support (\cref{fig:ransac}). Efficient RANSAC \citep{Schnabel2007} samples
+locally in an octree and estimates scores on subsets, and GlobFit \citep{Li2011} then enforces
+global relations such as parallelism, orthogonality and coaxiality among the detected primitives.
+
+\fig[0.7\textwidth]{ch08_ransac.png}{Sequential RANSAC on a synthetic scene of 6000 points with
+$5\%$ outliers: a plane, a cylinder and a sphere are detected, in that order, and their inliers
+coloured; the remaining points are outliers.}{fig:ransac}
+
+\begin{notebook}{Tema06\_4PCS\_RANSAC.ipynb}
+Part I implements 4PCS step by step: the LCP measure, the stability of wide bases
+($\Delta\theta\sim\varepsilon/D$), the affine invariants, \texttt{find\_congruent} with intermediate
+points, the iteration count and the main loop with two-stage verification, ICP refinement, and the
+normal-angle filter. Part II applies RANSAC to planes, spheres and cylinders, with degeneracy
+safeguards and sequential extraction.
+\end{notebook}
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item Global registration replaces proximity by descriptors (features) or by invariants
+  (4PCS) to find correspondences.
+  \item Harris 3D fits a quadric in a PCA frame and evaluates the Harris operator in closed form;
+  spin images histogram $(\alpha,\beta)$ around an oriented point.
+  \item Matches are filtered by similarity and geometric consistency, grouped, fitted in closed form
+  and refined with ICP.
+  \item 4PCS matches coplanar 4-point bases through the affine invariants $r_1,r_2$ and
+  intermediate points; wide bases are stable but must fit in the overlap,
+  $L=\log(1-p_s)/\log(1-f^N)$.
+  \item RANSAC fits primitives from minimal sets and extracts them sequentially.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+Show that the ratio $r_1$ of three collinear points is invariant under any affine map
+$\bx\mapsto\mA\bx+\bb$. Why is a pair of distances not enough to characterise the base?
+\end{exercise}
+\begin{exercise}
+How many iterations does RANSAC need to find a plane covering $20\%$ of the points with
+probability $0.99$, using three-point samples? And using one point with its normal?
+\end{exercise}
+\begin{exercise}
+Prove that the spin coordinates $(\alpha,\beta)$ of a point are invariant under rigid motions
+applied to both the point and the oriented basis.
+\end{exercise}

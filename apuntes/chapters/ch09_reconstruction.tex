@@ -1,0 +1,275 @@
+\chapter{Normals and Surface Reconstruction}\label{ch:recon}
+
+After registration, the scans form a single point cloud that samples the surface of the object.
+Surface reconstruction turns it into a watertight mesh. Almost every method needs oriented
+normals, so the chapter starts with normal estimation, orientation and outlier removal, and then
+studies the extraction of iso-surfaces and three implicit reconstruction methods: Hoppe's signed
+distance, radial basis functions and Poisson reconstruction. It follows Tema 7 and the companion
+notebook, which implements every method on a genus-one test surface; the survey of
+\citet{Berger2017} covers the field broadly.
+
+\section{Normal estimation}
+
+\subsection{Total least squares and PCA}
+
+A point cloud carries no normals, but the neighbours of a point lie approximately on its tangent
+plane. The plane $\{\bx:(\bx-\bc)\cdot\bn=0\}$ that best fits points $\bp_1,\dots,\bp_k$ in the
+\emph{total least squares} sense minimises the sum of squared orthogonal distances:
+\begin{equation}
+\min_{\bc,\ \norm{\bn}=1}\ \sum_{i=1}^k\bigl((\bp_i-\bc)\cdot\bn\bigr)^2 .
+\end{equation}
+For fixed $\bn$ the optimal $\bc$ is the centroid $\bar\bp$. Then the objective is
+$\bn\T\mC\bn$ with the covariance matrix
+\begin{equation}
+\mC=\sum_{i=1}^k(\bp_i-\bar\bp)(\bp_i-\bar\bp)\T ,
+\end{equation}
+and minimising a Rayleigh quotient over unit vectors gives the eigenvector of the smallest
+eigenvalue (\cref{app:linalg}). Writing the eigenvalues as $\lambda_0\le\lambda_1\le\lambda_2$, the
+normal is the eigenvector of $\lambda_0$, the other two span the tangent plane, and $\lambda_0$ is
+the residual of the fit. Applied to the $k$ nearest neighbours of every point, this is
+\emph{PCA normal estimation}, and it is fully vectorisable: build a kd-tree, gather the neighbours,
+compute all $3\times3$ covariances and their eigen-decompositions in batch.
+
+\subsection{The size of the neighbourhood}
+
+The choice of $k$ (or of a radius) is a bias--variance trade-off \citep{Mitra2003}. With noise of
+standard deviation $\sigma$, a larger neighbourhood averages more points and the angular error
+decreases (roughly like $\sigma/r$ for a neighbourhood of radius $r$). With curvature $\kappa$, a
+larger neighbourhood includes points far from the tangent plane and the error grows (roughly like
+$\kappa r$). The optimal $k^\star$ balances both and increases with the noise
+(\cref{fig:normals-k}).
+
+\fig[0.85\textwidth]{ch09_normals_k.pdf}{PCA normal estimation on a noisy genus-one surface.
+Median angle error against the number of neighbours $k$ for several noise levels. Without noise the
+error grows with $k$ because of curvature (slope $k^{1/2}$); with noise it first decreases (slope
+about $k^{-1}$) and then joins the curvature branch, so the best $k$ grows with
+$\sigma$.}{fig:normals-k}
+
+\subsection{Consistent orientation}
+
+PCA returns the normal line, not its direction: the sign of each eigenvector is arbitrary. When the
+scanner position is known, every normal is simply flipped to point towards the sensor. Otherwise,
+\citet{Hoppe1992} propagate the orientation over a graph:
+\begin{enumerate}
+  \item build the \emph{Riemannian graph}, connecting each point to its $k$ nearest neighbours;
+  \item weight each edge $(i,j)$ by $1-\abs{\bn_i\cdot\bn_j}$, which is small between nearly
+  parallel normals;
+  \item compute a minimum spanning tree, start from a point whose orientation is known (for
+  example the highest point, whose normal must point up) and traverse the tree, flipping $\bn_j$
+  whenever $\bn_i\cdot\bn_j<0$ for its parent $i$.
+\end{enumerate}
+The minimum spanning tree favours propagation across flat regions, where the decision is reliable,
+and delays it across sharp edges and thin parts, where it is not. On the test surface the fraction
+of outward normals goes from $50.3\%$ (random signs) to $100\%$ (\cref{fig:orientation}).
+
+\fig[0.7\textwidth]{ch09_orientation.png}{Normal orientation by minimum spanning tree
+propagation. Left: PCA normals with random signs (red: pointing inwards). Right: after propagation
+all normals point outwards.}{fig:orientation}
+
+\subsection{Outliers and what the eigenvalues say}
+
+Isolated points far from the surface corrupt normals and reconstructions. The \emph{statistical
+outlier filter} computes for every point the mean distance $\bar d_i$ to its $k$ nearest
+neighbours, and removes the points with $\bar d_i>\mu+\alpha s$, where $\mu$ and $s$ are the mean
+and standard deviation of all $\bar d_i$. The eigenvalues of the local covariance also carry
+geometric information. The \emph{surface variation} \citep{Pauly2002}
+\begin{equation}
+\sigma_\lambda=\frac{\lambda_0}{\lambda_0+\lambda_1+\lambda_2}\in\bigl[0,\tfrac13\bigr]
+\end{equation}
+is zero on planes, grows with curvature and reaches $1/3$ for isotropic distributions; it behaves
+like a curvature estimate and flags edges, corners and noisy regions (\cref{fig:outliers}).
+
+\fig[0.85\textwidth]{ch09_outliers.png}{Left: the test surface with $6\%$ uniformly distributed
+outliers (red). Centre: points flagged by the statistical filter ($k=16$, $\alpha=1$). Right:
+surface variation $\sigma_\lambda$ on the clean surface, high on the saddle regions and the inner
+side of the handles.}{fig:outliers}
+
+\section{Why an implicit representation}
+
+Reconstruction methods are either \emph{explicit}, connecting the input points directly into
+triangles (ball pivoting \citep{Bernardini1999}, Delaunay-based methods, alpha shapes), or
+\emph{implicit}, fitting a function $f:\R^3\to\R$ whose zero level set approximates the points and
+extracting it as a mesh. Explicit methods interpolate the data, which is desirable for clean,
+dense samples but propagates noise and leaves holes. Implicit methods approximate: they average
+noise, produce watertight manifold surfaces by construction, fill holes, and their topology is
+decided by the function rather than by local connectivity decisions (\cref{sec:implicit}). The rest
+of the chapter follows the implicit route, which needs a way to extract the zero set.
+
+\section{Extracting iso-surfaces}\label{sec:marching}
+
+\subsection{Marching squares}
+
+Consider first a 2D function $F$ sampled on a grid. Each cell has four corners, each inside
+($F<0$) or outside ($F\ge0$), giving $2^4=16$ configurations. In each one the zero level crosses
+the edges whose endpoints have different signs, and the crossing on edge $(\ba,\bb)$ is placed by
+linear interpolation,
+\begin{equation}
+\bx=\ba+t(\bb-\ba),\qquad t=\frac{F(\ba)}{F(\ba)-F(\bb)} .
+\end{equation}
+A lookup table gives the segments for each configuration. Two configurations (diagonally
+opposite corners inside) are ambiguous: the two segments can separate the inside corners or join
+them (\cref{fig:msquares}). Evaluating the bilinear interpolant at the centre of the cell (the
+\emph{asymptotic decider} \citep{Nielson1991}) chooses the consistent option. Linear
+interpolation makes the extracted curve accurate even on coarse grids: a circle of radius one
+extracted on a $9\times9$ grid has length $6.228$ instead of $2\pi=6.283$.
+
+\fig[0.85\textwidth]{ch09_marching_squares.pdf}{Marching squares. From left: a slice $z=0$ of the
+signed function of the test surface with its zero level; a unit circle extracted on a $9\times9$
+grid (filled dots inside); the two possible connections of the ambiguous case 5.}{fig:msquares}
+
+\subsection{Marching cubes and marching tetrahedra}
+
+Marching cubes \citep{Lorensen1987} applies the same idea to cubes: $2^8=256$ sign
+configurations, which reduce to 15 by symmetry, each mapped to up to four triangles with vertices
+interpolated on the edges. The original table had ambiguous faces whose choices were not consistent
+between neighbouring cubes, producing holes; corrected tables and the asymptotic decider fix this.
+\emph{Marching tetrahedra} splits each cube into five or six tetrahedra. A tetrahedron has only
+$2^4=16$ configurations of three kinds: no crossing, one corner separated from the others (one
+triangle), or two corners separated from two (a quadrilateral, two triangles). There is no
+ambiguity, at the price of more triangles and a result that depends on how the cubes are split.
+Both methods produce meshes with many thin triangles, which remeshing improves (\cref{ch:remesh}).
+
+\section{Hoppe's signed distance}
+
+\Citet{Hoppe1992} define the signed distance to the surface through the tangent planes estimated
+from the points. Each point $\bp_i$ has a tangent plane with centre $\bo_i$ (the centroid of its
+neighbours) and oriented normal $\bn_i$. For a query $\bx$, find the plane whose centre is closest
+and use the signed distance to it:
+\begin{equation}
+f(\bx)=(\bx-\bo_i)\cdot\bn_i,\qquad i=\argmin_j\norm{\bx-\bo_j}.
+\end{equation}
+Where $\bx$ is far from all the data the function is left undefined, so holes remain open. The
+function is only piecewise smooth (it jumps across the Voronoi boundaries of the centres), and
+noise in the normals produces spurious sign changes, small handles and isolated components.
+
+\section{Radial basis functions}
+
+\Citet{Carr2001} fit a smooth global interpolant
+\begin{equation}
+f(\bx)=\sum_{j=1}^Nw_j\,\varphi(\norm{\bx-\bc_j})+P(\bx),
+\end{equation}
+with the \emph{biharmonic} kernel $\varphi(r)=r$ (the minimiser of the bending energy
+$\int\norm{\grad^2f}^2$ in 3D) and a linear polynomial $P$. The interpolation conditions require
+$f=0$ at the input points. Since $f\equiv0$ also satisfies them, \emph{off-surface} points are added
+along the normals: $f(\bp_i+\varepsilon\bn_i)=\varepsilon$ and $f(\bp_i-\varepsilon\bn_i)=-\varepsilon$.
+With centres $\bc_j$ at all constraint points, the weights and polynomial coefficients solve the
+symmetric system
+\begin{equation}
+\begin{pmatrix}\mA&\mP\\\mP\T&\bzero\end{pmatrix}\begin{pmatrix}\bw\\\bc\end{pmatrix}=
+\begin{pmatrix}\bfun\\\bzero\end{pmatrix},\qquad A_{ij}=\varphi(\norm{\bc_i-\bc_j}),\quad
+\mP_{i\cdot}=(1,\bc_i\T),
+\end{equation}
+whose second block row enforces the orthogonality conditions that make the solution unique. The
+matrix is dense, so a direct solve costs $O(N^3)$; Carr et al.\ use fast multipole methods and a
+greedy selection of the centres to handle millions of points. Replacing $\mA$ by $\mA+\rho\mI$
+turns interpolation into smoothing, which is needed for noisy data. RBF surfaces are smooth and
+fill holes gracefully, since the biharmonic function extends the surface with minimal bending.
+
+\section{Poisson reconstruction}
+
+\subsection{From normals to an indicator function}
+
+\Citet{Kazhdan2006} reconstruct the \emph{indicator function} $\chi$ of the solid, equal to one
+inside and zero outside. Its gradient is zero everywhere except at the surface, where it is a delta
+function in the direction of the inward normal. After smoothing with a filter $\tilde F$, the
+gradient of the smoothed indicator equals the smoothed field of (inward) normals:
+\begin{equation}
+\grad(\chi*\tilde F)(\bq)=\int_{\partial M}\tilde F_\bp(\bq)\,\bn_{\mathrm{in}}(\bp)\dd\bp\approx
+\sum_{\bp\in P}A_\bp\,\tilde F_\bp(\bq)\,\bn_{\mathrm{in}}(\bp)=:\bm V(\bq),
+\end{equation}
+where the integral is approximated by the samples with area weights $A_\bp$. The oriented points
+therefore give us the gradient of the function we want. In general $\bm V$ is not exactly a gradient
+field, so we look for the $\chi$ whose gradient is closest in the least-squares sense,
+\begin{equation}
+\min_\chi\int\norm{\grad\chi-\bm V}^2\dd\bx\quad\Longrightarrow\quad\Lap\chi=\grad\cdot\bm V ,
+\end{equation}
+a Poisson equation, by the Euler--Lagrange equation of the functional.
+
+\subsection{Solving and extracting}
+
+On a regular grid with periodic boundary conditions the Poisson equation is diagonal in the
+Fourier basis, so the notebook solves it with the FFT: transform $\grad\cdot\bm V$, divide each
+coefficient by $-\norm{\boldsymbol\omega}^2$ (setting the constant mode to zero), and transform back.
+The original method uses an adaptive octree with B-spline basis functions centred at the nodes and
+a multigrid solver, so the resolution concentrates near the surface. The solution is defined up to
+a constant, so the surface is extracted at the iso-value equal to the average of $\chi$ at the
+input samples, with marching cubes. The method is global, so it is robust to noise and missing
+data, and produces watertight surfaces; its weaknesses are over-smoothing of thin features and the
+tendency to close holes with smooth caps whether or not they are real.
+
+\subsection{Screened Poisson}
+
+\Citet{Kazhdan2013} add a \emph{screening} term that asks the function to vanish at the samples
+(taking the iso-value $\tfrac12$ into account, or equivalently shifting $\chi$),
+\begin{equation}
+\min_\chi\int\norm{\grad\chi-\bm V}^2\dd\bx+\alpha\sum_{\bp\in P}\chi(\bp)^2 ,
+\end{equation}
+whose optimality condition is the screened Poisson equation $(\Lap-\alpha\mathcal I_P)\chi=\grad\cdot\bm V$,
+with $\mathcal I_P$ the operator that evaluates at the samples. The interpolation weight $\alpha$
+pulls the surface towards the data and recovers detail lost by the plain method, while keeping
+its robustness. The octree depth controls the resolution (\cref{fig:bunny-poisson}).
+
+\fig{ch09_bunny_poisson.png}{Screened Poisson reconstruction (Open3D implementation) of six merged
+range scans of the bunny at octree depths 5, 7 and 9. Higher depth resolves more detail and also
+more noise.}{fig:bunny-poisson}
+
+\section{Comparison}
+
+\Cref{fig:recon} compares the three implicit methods on the noisy test surface, with error maps
+against the exact surface. All recover the correct topology ($\chi=0$, genus one), and the median
+errors are similar: $0.077\%$, $0.073\%$ and $0.091\%$ of the bounding-box diagonal for Hoppe, RBF
+and Poisson (95th percentiles $0.234\%$, $0.230\%$ and $0.251\%$). The differences appear in harder
+regimes (\cref{fig:regimes}): with strong noise Hoppe's piecewise construction produces a surface of
+genus 35, full of spurious handles, while RBF and Poisson remain genus one; with a large hole Hoppe
+leaves it open and creates spurious handles at its border, while the global methods fill it; with
+sparse data all three succeed on this simple shape.
+
+\fig{ch09_reconstruction.png}{Left: a slice of the indicator function computed by Poisson
+reconstruction (the dashed line is the extracted iso-value). Right: error maps of Hoppe, RBF and
+Poisson reconstructions on the test surface (dark is small error, bright is large).}{fig:recon}
+
+\fig[0.85\textwidth]{ch09_regimes.png}{The three methods in three difficult regimes: strong noise
+($\sigma=0.02$), a large hole, and only 1200 points. The genus of each result is shown in the
+title; the correct value is one.}{fig:regimes}
+
+\paragraph{Beyond implicit functions.} Man-made objects are better reconstructed by detecting
+primitives first and structuring the points around them \citep{Lafarge2013}, or by fitting
+primitives with global relations \citep{Li2011}. Learning-based methods add priors learned from
+data: neural implicit fields encode $f$ as a network, and Point2Mesh \citep{Hanocka2020} shrink-wraps
+an initial mesh onto the points while a convolutional network over the mesh acts as a
+\emph{self-prior} that favours locally self-similar geometry.
+
+\begin{notebook}{Tema07\_Normales\_y\_Reconstruccion.ipynb}
+Block 1: total least squares plane fitting, vectorised PCA normals, the neighbourhood sweep and
+$k^\star(\sigma)$, orientation by minimum spanning tree, the statistical outlier filter and surface
+variation. Block 2: marching squares, the marching tetrahedra case table, Hoppe's signed distance,
+biharmonic RBFs with off-surface points, Poisson reconstruction with an FFT solver and the
+iso-value, and the comparison of the three methods in the three regimes of \cref{fig:regimes}.
+\end{notebook}
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item PCA normals are the eigenvectors of the smallest eigenvalue of the local covariance; the
+  neighbourhood size trades noise against curvature.
+  \item Orientation is propagated over a minimum spanning tree with weights $1-\abs{\bn_i\cdot\bn_j}$.
+  \item Implicit reconstruction fits $f$ and extracts $\{f=0\}$ with marching squares, cubes or
+  tetrahedra, interpolating linearly on the edges.
+  \item Hoppe uses the tangent plane of the closest sample (local, fragile); RBFs solve a dense
+  global interpolation with off-surface constraints; Poisson solves $\Lap\chi=\grad\cdot\bm V$ for the
+  indicator function, and its screened version pulls the surface to the points.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+Show that the centroid is the optimal plane centre in total least squares and that the minimum of
+the objective equals the smallest eigenvalue of $\mC$.
+\end{exercise}
+\begin{exercise}
+Write the 16 cases of marching tetrahedra grouped into the three types, and the triangles produced
+in each, with consistent orientation.
+\end{exercise}
+\begin{exercise}
+Derive the Euler--Lagrange equation of $\int\norm{\grad\chi-\bm V}^2$ and explain why the solution is
+determined only up to a constant. How is the constant fixed in practice?
+\end{exercise}

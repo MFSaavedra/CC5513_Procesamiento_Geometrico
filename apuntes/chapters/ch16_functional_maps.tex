@@ -1,0 +1,220 @@
+\chapter{Shape Matching and Functional Maps}\label{ch:fmaps}
+
+Given two shapes, \emph{shape matching} computes the correspondences between them: the best map
+that sends each point of one shape to its counterpart on the other. Correspondences let us
+transfer information: textures and parameterizations, segmentations and labels, deformations and
+animations. Rigid matching (\cref{ch:icp,ch:global}) searches a six-dimensional space of rotations
+and translations; for non-rigid shapes there is no such compact representation, and two questions
+arise: what makes a correspondence good, and how can it be computed efficiently? This chapter
+answers them with the \emph{functional map} framework of \citet{Ovsjanikov2012}, following Tema 14 and
+the companion notebook. We use the eigenbases of \cref{ch:spectral}, $\mL\bphi=\lambda\mM\bphi$ with
+$\mPhi\T\mM\mPhi=\mI$, on two shapes $\M$ and $\NN$.
+
+\section{Isometric shape matching}
+
+A natural deformation model for articulated and organic shapes is \emph{isometry}: a good map should
+preserve geodesic distances. For a map $T:\NN\to\M$ the \emph{geodesic distortion}
+\begin{equation}
+\mathrm{dist}(T)=\sum_{x,y\in\NN}\bigl(d_\NN(x,y)-d_\M(T(x),T(y))\bigr)^2
+\end{equation}
+is zero for an isometry. Minimising it over all maps is a quadratic assignment problem: the space of
+solutions is discrete, huge, highly non-linear and non-convex. Brute force is possible only for a few
+landmarks (the notebook matches a handful of points by exhaustive search), and continuous
+relaxations such as generalized multidimensional scaling \citep{Bronstein2006} are expensive and
+prone to local minima. Symmetry adds a fundamental ambiguity: the left--right flip of a cat is also an
+isometry.
+
+\section{The functional representation of maps}
+
+\subsection{From points to functions}
+
+The key idea of \citet{Ovsjanikov2012} is to stop mapping points and map \emph{functions}. A
+pointwise map $T:\NN\to\M$ induces a map between function spaces, the pull-back
+\begin{equation}
+T_F:\mathcal F(\M)\to\mathcal F(\NN),\qquad T_F(f)=f\circ T ,
+\end{equation}
+which sends a function on $\M$ (for example an indicator of the head) to a function on $\NN$ (the
+indicator of the corresponding region). Three facts make this useful:
+\begin{itemize}
+  \item $T_F$ is \emph{linear}: $T_F(\alpha f+\beta g)=\alpha T_F(f)+\beta T_F(g)$, even when $T$ is a
+  wild, non-smooth map;
+  \item $T_F$ is \emph{complete}: $T$ can be recovered from $T_F$ by mapping indicator functions of
+  points (or, in practice, by nearest neighbours as below);
+  \item $T_F$ is a linear map between vector spaces, so once bases are chosen it is a matrix.
+\end{itemize}
+
+\subsection{The matrix of a functional map}
+
+Discretely, a function on $\M$ is a vector $\bfun\in\R^{\abs{\M}}$ and the pull-back is a sparse matrix
+$\mPi\in\{0,1\}^{\abs{\NN}\times\abs{\M}}$ with $\Pi_{yx}=1$ if $T(y)=x$, one entry per row:
+$\bg=\mPi\bfun$. This matrix is as large as the meshes. Expressing functions in the first $k$
+eigenfunctions of each shape, $\bfun=\mPhi_\M\mathbf a$ and $\bg=\mPhi_\NN\mathbf b$, and using
+$\mPhi_\NN^+=\mPhi_\NN\T\mM_\NN$, the coefficients are related by a $k\times k$ matrix:
+\begin{equation}
+\mathbf b=\mC\mathbf a,\qquad \mC=\mPhi_\NN^+\,\mPi\,\mPhi_\M=\mPhi_\NN\T\mM_\NN\,\mPi\,\mPhi_\M .
+\label{eq:fmap}
+\end{equation}
+The entry $C_{ji}=\inner{\phi^\NN_j}{\phi^\M_i\circ T}_\NN$ says how much of the $i$-th
+eigenfunction of $\M$, transported to $\NN$, lies along the $j$-th eigenfunction of $\NN$. The Laplacian
+eigenfunctions are the natural basis: they generalise the Fourier basis, are ordered by eigenvalue,
+and so provide a natural notion of scale; truncating them keeps the smooth part of the map.
+
+\begin{figure}[tbp]
+\centering
+\begin{tikzpicture}[node distance=12mm and 26mm, every node/.style={font=\small}, ar/.style={-{Stealth[length=2.2mm]}, thick}]
+\node (f) {$f\in\mathcal F(\M)$};
+\node[right=of f] (g) {$g=f\circ T\in\mathcal F(\NN)$};
+\node[below=of f] (a) {$\mathbf a\in\R^k$};
+\node[below=of g] (b) {$\mathbf b\in\R^k$};
+\draw[ar] (f) -- node[above] {$T_F$} (g);
+\draw[ar] (a) -- node[above] {$\mC$} (b);
+\draw[ar] (f) -- node[left] {$\mPhi_\M\T\mM_\M$} (a);
+\draw[ar] (g) -- node[right] {$\mPhi_\NN\T\mM_\NN$} (b);
+\end{tikzpicture}
+\caption{A functional map transports functions from $\M$ to $\NN$; in the spectral bases it becomes the
+small matrix $\mC$ acting on Fourier coefficients.}
+\label{fig:fmap-diagram}
+\end{figure}
+
+\subsection{Properties}
+
+The functional representation of maps is compact, inherently global and multiscale, handles
+uncertainty and ambiguity (a functional map can be ``fuzzy''), allows efficient manipulation
+(composition is matrix multiplication, inversion is transposition), and leads to simple, often
+linear, optimisation problems. Several properties of $\mC$ reflect properties of $T$:
+\begin{itemize}
+  \item \textbf{Constants}: constant functions map to constant functions, so $C_{11}=\pm1$ (for shapes
+  of equal area) and the first row and column vanish elsewhere.
+  \item \textbf{Area preservation}: if $T$ preserves areas, it preserves the $L^2$ inner product, and
+  $\mC$ is orthonormal, $\mC\T\mC=\mI$.
+  \item \textbf{Isometry}: if $T$ is an isometry, it commutes with the Laplacians,
+  $\mL_\NN T_F=T_F\mL_\M$, so $\mC\mLambda_\M=\mLambda_\NN\mC$: entries $C_{ji}$ can be non-zero only if
+  $\lambda^\NN_j=\lambda^\M_i$. For near-isometries $\mC$ is nearly diagonal (with signs), with small
+  blocks where eigenvalues are close (\cref{fig:cmatrix}).
+\end{itemize}
+
+\fig{ch16_cmatrix.png}{Functional maps between a standing cat ($\M$, 27\,894 vertices) and a
+decimated cat in another pose ($\NN$, about 8000 vertices with a different triangulation), in bases of
+30 eigenfunctions (blue negative, red positive). Left: the ground-truth map gives a nearly diagonal
+matrix with signs and small blocks. Centre: a random map gives a matrix that is zero except for its
+first row. Right: entries of the true map are large only where the eigenvalues of the two shapes are
+close, the commutativity with the Laplacian.}{fig:cmatrix}
+
+\subsection{Transferring functions}
+
+With $\mC$, transferring a function is a matrix--vector product in the spectral domain:
+$\bg=\mPhi_\NN\mC\mPhi_\M\T\mM_\M\bfun$. Segmentations are transferred by mapping the indicator of each
+segment and taking, at every point, the label with the largest value (\cref{fig:fmap-transfer}). A small
+basis already transfers smooth functions well; sharp boundaries need more coefficients.
+
+\fig{ch16_transfer.png}{Transfer of an eight-part segmentation from $\M$ (left) to $\NN$ with the
+ground-truth functional map truncated to $k=5$, $20$ and $80$ eigenfunctions. The fraction of correctly
+labelled vertices grows from $70\%$ to $97\%$ and $100\%$.}{fig:fmap-transfer}
+
+\section{From a functional map to a pointwise map}
+
+In practice we do not know the map; our goal is to compute correspondences, and we need a way to get
+them from the functional representation. From \eqref{eq:fmap}, $\mPi\mPhi_\M\approx\mPhi_\NN\mC$ in the
+truncated basis, and if $\mC$ is orthonormal, $\mPhi_\NN\approx\mPi\mPhi_\M\mC\T$: row $y$ of
+$\mPhi_\NN$ (the spectral embedding of the point $y$) should be close to row $T(y)$ of $\mPhi_\M\mC\T$.
+Hence
+\begin{equation}
+T(y)=\argmin_{x\in\M}\bigl\|\mPhi_\M(x)\,\mC\T-\mPhi_\NN(y)\bigr\| ,
+\label{eq:p2p}
+\end{equation}
+a nearest-neighbour search between the rows of two $k$-dimensional point sets. The variant that
+compares $\mPhi_\M(x)$ with $\mPhi_\NN(y)\mC$ is equivalent for orthonormal $\mC$, but for the
+non-orthonormal matrices of the estimation and ZoomOut steps the form \eqref{eq:p2p} is clearly more
+accurate: in our experiment the median error of the initial estimate is $0.039$ with it and $0.081$ with
+the other, and ZoomOut reaches $0.010$ instead of $0.044$. The quality of the recovered map is limited by
+the truncation: even with the exact $\mC$ the median geodesic error is $0.038$ for $k=5$, $0.019$ for
+$k=20$ and $0.0053$ for $k=120$ (\cref{fig:fmap-errors}, right).
+
+\section{Estimating the functional map}
+
+Without a known map, $\mC$ is estimated from functions that are expected to correspond, the
+\emph{descriptors}. Let $\mathbf F\in\R^{\abs\M\times q}$ and $\mathbf G\in\R^{\abs\NN\times q}$ hold $q$
+corresponding functions on both shapes, with spectral coefficients $\mA=\mPhi_\M\T\mM_\M\mathbf F$ and
+$\mB=\mPhi_\NN\T\mM_\NN\mathbf G$. Good descriptors are isometry invariant: HKS and WKS at several scales
+(\cref{ch:spectral}), heat kernels or geodesic distances from a few known landmark correspondences,
+and indicators of corresponding segments. The functional map should satisfy $\mC\mA\approx\mB$ and
+commute with the Laplacians, which gives the least-squares problem
+\begin{equation}
+\min_\mC\ \norm{\mC\mA-\mB}_F^2+\mu\,\norm{\mC\mLambda_\M-\mLambda_\NN\mC}_F^2 .
+\end{equation}
+The commutativity term equals $\sum_{ji}C_{ji}^2(\lambda^\NN_j-\lambda^\M_i)^2$, so the problem
+decouples into one small linear system per row $\bc_j$ of $\mC$:
+\begin{equation}
+\bigl(\mA\mA\T+\mu\,\diag\bigl((\lambda_j^\NN-\lambda_i^\M)^2\bigr)_i\bigr)\bc_j\T=\mA\,\mB_{j\cdot}\T .
+\end{equation}
+Orthonormality can be added as a soft penalty (a non-linear problem), and descriptor commutativity
+operators \citep{Nogneng2017} extract more information from each descriptor.
+
+\section{Refinement}
+
+\paragraph{Spectral ICP.} The initial $\mC$ is noisy. \citet{Ovsjanikov2012} refine it by alternating,
+as in ICP, between the pointwise map \eqref{eq:p2p} and the functional map: compute $T$ from $\mC$,
+compute $\mC=\mPhi_\NN^+\mPi\mPhi_\M$ from $T$, and project $\mC$ onto the orthonormal matrices with its
+SVD, $\mC=\mU\mSigma\mV\T\mapsto\mU\mV\T$. Geometrically, this rigidly aligns the two spectral
+embeddings by an orthonormal transformation.
+
+\paragraph{ZoomOut.} \citet{Melzi2019} observed that the refinement works better if the size of the
+basis grows during the iterations: start from $\mC$ of size $k_0$, recover $T$, compute the functional
+map of size $k_0+1$ (or $k_0+s$) from $T$, and repeat up to $k_{\max}$. This \emph{spectral upsampling}
+needs no orthonormality projection and no descriptors after the initial step; each iteration is a
+nearest-neighbour search and a projection. It is simple, fast, and very effective.
+
+\fig{ch16_pipeline.png}{The matching pipeline on the two cats, visualised by transferring a colour
+function (the coordinates of $\M$) to $\NN$. From left: the source, the map recovered from the initial
+estimate ($k=20$, WKS plus heat kernels of five landmarks), after spectral ICP, after ZoomOut from
+$k=20$ to $k=120$, and the ground truth.}{fig:fmap-pipeline}
+
+\fig[0.85\textwidth]{ch16_errors.pdf}{Left: cumulative geodesic error (shapes of unit area) of the maps
+of \cref{fig:fmap-pipeline}, with medians $0.038$ (initial), $0.025$ (spectral ICP), $0.0094$ (ZoomOut) and
+$0.0053$ for the map recovered from the exact $\mC$ with $k=120$. Right: median error of the map
+recovered from the exact functional map against the size of the basis.}{fig:fmap-errors}
+
+\paragraph{Symmetry.} If the landmarks are given reflected (left and right swapped), every step above
+converges to the symmetric map, which is also a near-isometry and is equally good for the intrinsic
+energies: the pipeline cannot distinguish them. Orientation-aware descriptors or extrinsic information
+break the tie.
+
+\paragraph{Beyond.} Partial functional maps \citep{Rodola2017} handle a shape that matches only a part of
+another, where $\mC$ becomes a slanted, rectangular-like matrix; deep functional maps
+\citep{Litany2017} learn the descriptors with a network trained so that the resulting $\mC$ produces good
+correspondences. The survey of \citet{vanKaick2011} reviews other correspondence methods.
+
+\begin{notebook}{Tema14\_Shape\_Matching\_Mapas\_Funcionales.ipynb}
+Block 1 measures the geodesic distortion of a map and matches landmarks by brute force; block 2 builds
+the matrix of a pointwise map, its functional map in the Laplace--Beltrami basis, and transfers
+functions; block 3 converts a functional map back to a pointwise map; block 4 estimates $\mC$ by least
+squares from descriptors; block 5 refines it with spectral ICP and ZoomOut and studies reflected
+landmarks; block 6 applies the whole pipeline to another pair of shapes.
+\end{notebook}
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item A pointwise map induces a linear map of functions, $f\mapsto f\circ T$, represented in spectral
+  bases by a small matrix $\mC=\mPhi_\NN\T\mM_\NN\mPi\mPhi_\M$.
+  \item For near-isometries $\mC$ is nearly diagonal and orthonormal and commutes with the eigenvalue
+  matrices.
+  \item $\mC$ is estimated by linear least squares from corresponding descriptors with a commutativity
+  regulariser, and converted to points by nearest neighbours of $\mPhi_\M\mC\T$ and $\mPhi_\NN$.
+  \item Spectral ICP and ZoomOut refine the map; ZoomOut grows the basis and gives the most accurate
+  results.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+Show that if $T$ is a bijection that preserves areas, then $T_F$ preserves the $L^2$ inner product and
+$\mC$ (in complete bases) is orthogonal.
+\end{exercise}
+\begin{exercise}
+Show that the commutativity penalty $\norm{\mC\mLambda_\M-\mLambda_\NN\mC}_F^2$ equals
+$\sum_{ji}C_{ji}^2(\lambda_j^\NN-\lambda_i^\M)^2$ and derive the row-wise linear systems.
+\end{exercise}
+\begin{exercise}
+How is the functional map of the composition $T_1\circ T_2$ related to the functional maps of $T_1$ and
+$T_2$? What does this imply for maps between three shapes?
+\end{exercise}

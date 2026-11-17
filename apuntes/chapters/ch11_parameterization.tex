@@ -1,0 +1,234 @@
+\chapter{Parameterization}\label{ch:param}
+
+A parameterization maps a surface onto a simple domain, usually a region of the plane. It is how
+textures are painted on 3D models, and more generally it lets us process a surface with 2D
+tools: many problems become easier in the plane. This chapter defines the problem, measures the
+distortion of a map, and derives the classical linear methods (Tutte, harmonic and mean value
+mappings) and a free-boundary conformal method (LSCM), following Tema 9 and the surveys of
+\citet{Floater2005,Sheffer2006}.
+
+\section{Applications}
+
+\begin{itemize}
+  \item \textbf{Texture mapping and 3D painting}: each vertex receives coordinates $(u,v)$ in a
+  texture image, and the rendering pipeline interpolates them across the triangles; painting tools
+  write directly into the texture through the inverse map.
+  \item \textbf{Normal mapping}: simplification approximates the geometry with few triangles,
+  but appearance depends on the normals. Decoupling geometry from appearance, the normals of the
+  detailed mesh are stored in a texture of the simplified one, which then looks detailed.
+  \item \textbf{Remeshing}: sampling a regular grid or a Delaunay triangulation in the parameter
+  domain and mapping it back yields a new mesh (\cref{ch:remesh}).
+  \item Surface fitting (splines over the parameter domain), editing, completion, interpolation,
+  morphing and correspondence between shapes through a common domain, and visualisation.
+\end{itemize}
+
+\section{The problem}
+
+Given a surface $S\subset\R^3$ and a domain $\Omega\subset\R^2$, find a bijective map
+$\bu:S\to\Omega$, possibly subject to constraints such as fixed boundary positions
+$\bu(\bx_i)=\bu_i$. For a triangle mesh, $\bu$ is piecewise linear, determined by the images
+$\bu_i\in\R^2$ of the vertices, and bijectivity means that no triangle is flipped and that the
+images do not overlap. Several difficulties appear immediately:
+\begin{itemize}
+  \item \textbf{Domain and topology}: a planar region can only receive surfaces with the topology of
+  a disk. Closed surfaces or surfaces with handles must be cut along seams into one or several
+  charts (an \emph{atlas}), or mapped to other domains such as the sphere or a coarse base mesh.
+  \item \textbf{Boundary}: the boundary may be fixed to a convex polygon or left free.
+  \item \textbf{Many solutions}: there are infinitely many bijections, so we must choose one that
+  distorts the geometry as little as possible.
+\end{itemize}
+
+\section{Measuring distortion}
+
+Restricted to a triangle, a piecewise linear map is affine: in an orthonormal frame of the triangle
+plane its Jacobian $\mJ$ is a $2\times2$ matrix. Its singular values $\sigma_1\ge\sigma_2$ are the
+maximal and minimal stretches: a small circle in the triangle maps to an ellipse with semi-axes
+$\sigma_1$ and $\sigma_2$. A map is
+\begin{itemize}
+  \item \textbf{conformal} (angle preserving) if $\sigma_1=\sigma_2$;
+  \item \textbf{equiareal} (area preserving) if $\sigma_1\sigma_2=1$;
+  \item \textbf{isometric} (length preserving) if $\sigma_1=\sigma_2=1$, that is, both conformal and
+  equiareal.
+\end{itemize}
+Isometric maps preserve intrinsic properties, those that depend only on angles and distances
+measured on the surface, such as geodesic distances. Here the Theorema Egregium brings bad news:
+Gaussian curvature is intrinsic, so a surface with $K\neq0$ has no isometric map to the plane. A
+sphere cannot be flattened without distortion, which is why every map of the Earth compromises
+(\cref{fig:projections}). The \emph{Mercator} projection
+$(\lambda,\varphi)\mapsto(\lambda,\ln\tan(\tfrac\pi4+\tfrac\varphi2))$ is conformal (it maps
+loxodromes, curves of constant bearing, to straight lines) but inflates areas towards the poles; the
+\emph{Lambert} cylindrical projection $(\lambda,\varphi)\mapsto(\lambda,\sin\varphi)$ preserves
+areas but shears angles. For meshes, the quantities $\sigma_1/\sigma_2\ge1$ (angle distortion) and
+$\sigma_1\sigma_2$ (area distortion) per triangle measure the quality of a parameterization.
+
+\fig[0.85\textwidth]{ch11_projections.pdf}{Two maps of the sphere with the same graticule and the
+same circles of equal radius on the globe (Tissot indicatrices). Mercator keeps them circular but
+enlarges them towards the poles; Lambert keeps their area but flattens them.}{fig:projections}
+
+\section{The spring model and barycentric mappings}
+
+Imagine a spring along every edge of the mesh, with stiffness $D_{ij}>0$. If the boundary vertices
+are fixed in the plane, the interior vertices settle at the equilibrium that minimises the potential
+energy
+\begin{equation}
+E=\frac12\sum_{(i,j)\in E}D_{ij}\norm{\bu_i-\bu_j}^2 .
+\end{equation}
+The fixed boundary prevents the degenerate solution in which all vertices collapse to a point.
+Setting $\partial E/\partial\bu_i=\bzero$ for an interior vertex gives
+\begin{equation}
+\sum_{j\in\mathcal N(i)}D_{ij}(\bu_i-\bu_j)=\bzero\quad\Longleftrightarrow\quad
+\bu_i=\sum_{j\in\mathcal N(i)}\lambda_{ij}\bu_j,\qquad \lambda_{ij}=\frac{D_{ij}}{\sum_kD_{ik}} :
+\end{equation}
+every interior vertex is a convex combination of its neighbours, with \emph{barycentric}
+coordinates $\lambda_{ij}$. In practice:
+\begin{enumerate}
+  \item fix the boundary vertices on a convex polygon (triangle, square or circle), for example
+  spaced proportionally to the boundary edge lengths;
+  \item form the linear equations $\bu_i-\sum_j\lambda_{ij}\bu_j=0$ for the interior vertices,
+  moving the known boundary terms to the right-hand side;
+  \item solve two sparse linear systems with the same matrix, one for $u$ and one for $v$.
+\end{enumerate}
+In matrix form the system is $\mL\mathbf U=\mathbf B$. With the normalised weights $\lambda_{ij}$ the
+matrix $\mL$ is not symmetric; using the raw weights $D_{ij}$, $L_{ij}=-D_{ij}$ and
+$L_{ii}=\sum_jD_{ij}$, it is symmetric positive definite on the interior vertices and can be solved
+with Cholesky or conjugate gradients.
+
+\begin{theorem}[Maxwell--Tutte \citep{Tutte1963}, Floater \citep{Floater1997}]
+If the mesh is a triangulated disk (a 3-connected planar graph), the boundary is mapped
+bijectively onto a convex polygon and every interior vertex is a convex combination of its
+neighbours with positive weights, then the resulting piecewise linear map is a valid embedding:
+no triangle is flipped and the map is bijective.
+\end{theorem}
+
+Tutte's original \emph{barycentric drawing} uses uniform weights $D_{ij}=1$. It is always valid
+but ignores the geometry: a planar mesh is not mapped to itself, so the method does not have
+\emph{linear reproduction}. Weights proportional to the edge lengths do not fix this either.
+Linear reproduction requires that each vertex's weights be barycentric coordinates of the vertex
+with respect to its neighbours in the original (planar) position; for three neighbours they are
+unique, but for more neighbours there are many possible choices, and the following two are the most
+used.
+
+\section{Conformal and harmonic maps}
+
+The Riemann mapping theorem guarantees that any surface topologically equivalent to a disk can be
+mapped conformally to the unit disk. In local isothermal coordinates a conformal map
+$(u,v)$ satisfies the Cauchy--Riemann equations
+\begin{equation}
+\frac{\partial u}{\partial x}=\frac{\partial v}{\partial y},\qquad
+\frac{\partial u}{\partial y}=-\frac{\partial v}{\partial x},
+\end{equation}
+which imply $\Lap u=\Lap v=0$: the coordinate functions of a conformal map are harmonic for the
+Laplace--Beltrami operator. The converse does not hold, so isometric $\subset$ conformal $\subset$
+harmonic. \emph{Harmonic maps} minimise the Dirichlet energy
+$E_D(\bu)=\tfrac12\int_S\norm{\grad u}^2+\norm{\grad v}^2\dd A$ for given boundary values. They are
+easier to compute than conformal maps (a linear problem) but do not necessarily preserve angles.
+
+\begin{theorem}[Rad\'o--Kneser--Choquet]
+If $\bu:S\to\R^2$ is harmonic and maps the boundary of $S$ homeomorphically onto the boundary of a
+convex region $\Omega^\ast$, then $\bu$ is a bijection onto $\Omega^\ast$.
+\end{theorem}
+
+Discretising the Dirichlet energy with linear finite elements gives exactly the spring energy with
+the cotangent weights of \cref{ch:smooth} \citep{Pinkall1993,Eck1995},
+\begin{equation}
+D_{ij}=\cot\alpha_{ij}+\cot\beta_{ij} .
+\end{equation}
+The \emph{discrete harmonic map} has linear reproduction and approximates the conformal map for
+the given boundary. However, the cotangent weights are negative across non-Delaunay edges, so the
+discrete theorem does not apply and the map is not guaranteed to be bijective: badly shaped meshes
+can fold.
+
+\paragraph{Mean value coordinates.} \citet{Floater2003} derived barycentric coordinates from the
+mean value property of harmonic functions:
+\begin{equation}
+D_{ij}=\frac{\tan(\delta_{ij}/2)+\tan(\gamma_{ij}/2)}{\norm{\bx_i-\bx_j}},
+\end{equation}
+where $\delta_{ij}$ and $\gamma_{ij}$ are the angles at $\bx_i$ between the edge $ij$ and its two
+neighbouring edges in the one-ring. The weights are always positive (the angles are smaller than
+$\pi$), so the map is always valid by Tutte's theorem, they have linear reproduction, and the result
+is visually very similar to the harmonic map, although not exactly conformal. Uniform and mean
+value or harmonic weights with a fixed convex boundary are the most used methods in practice.
+
+\begin{table}[tbp]
+\centering\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Weights & Always bijective & Linear reproduction & Angle preservation \\
+\midrule
+Uniform (Tutte) & yes & no & poor \\
+Cotangent (harmonic) & no (negative weights) & yes & good \\
+Mean value & yes & yes & good \\
+\bottomrule
+\end{tabular}
+\caption{Barycentric weights for fixed-boundary parameterization.}
+\label{tab:weights}
+\end{table}
+
+\fig[0.85\textwidth]{ch11_tutte.png}{Fixed-boundary parameterizations of a face patch of the Max
+Planck bust (3284 vertices, boundary on a circle) and the corresponding checkerboard textures.
+Uniform weights ignore the geometry and give a median angle distortion $\sigma_1/\sigma_2=2.56$;
+cotangent and mean value weights give $1.50$ and $1.52$. No triangle is flipped in any of the three
+maps.}{fig:tutte}
+
+\section{Free boundary: least squares conformal maps}
+
+Fixing the boundary on a circle forces distortion near it: the boundary of the face patch is far
+from circular, and the interior must absorb the difference. Free-boundary methods let the boundary
+take its natural shape. \emph{Least squares conformal maps} \citep{Levy2002} write the
+Cauchy--Riemann equations in complex form. In the local frame $(x,y)$ of a triangle $T$, with
+$U=u+\mathrm iv$, a map is conformal if and only if
+\begin{equation}
+\frac{\partial U}{\partial x}+\mathrm i\,\frac{\partial U}{\partial y}=0 .
+\end{equation}
+On a triangle the derivatives are constant and linear in the unknown vertex coordinates, so the
+\emph{conformal energy}
+\begin{equation}
+E_{\mathrm{LSCM}}(\mathbf U)=\sum_TA_T\left|\frac{\partial U}{\partial x}+\mathrm i\,\frac{\partial U}{\partial y}\right|^2
+\end{equation}
+is a quadratic form. It vanishes exactly for conformal maps, which exist only for developable
+surfaces, so in general it is minimised in the least-squares sense. The energy is invariant under
+similarity transformations of the plane (translation, rotation and scaling), so two vertices are
+pinned to remove these degrees of freedom, and the minimiser is the solution of a sparse linear
+least-squares problem. The same energy can be derived as the Dirichlet energy minus the area of the
+image, the \emph{discrete conformal parameterization} of \citet{Desbrun2002}. With the boundary free,
+the distortion drops dramatically (\cref{fig:lscm}).
+
+\fig{ch11_free_boundary.png}{Fixed versus free boundary on the face patch. The harmonic map to a
+circle has median $\log_2(\sigma_1/\sigma_2)=0.587$ (a ratio of $1.50$); LSCM, with the boundary
+free, has $0.031$ (a ratio of $1.02$), and its checkerboard keeps square cells everywhere. Right:
+histograms of the angle distortion per triangle.}{fig:lscm}
+
+\paragraph{Other methods.} Angle-based flattening (ABF, ABF++ \citep{Sheffer2005}) optimises the
+angles of the planar triangles directly and then reconstructs the positions. Local/global methods
+\citep{Liu2008} fit a rotation (ARAP) or similarity (ASAP) per triangle and solve a global Poisson
+system, alternating as in the deformation method of \cref{ch:deform}. For closed or high-genus
+surfaces, the mesh is first cut into charts along seams chosen in high-curvature or hidden regions,
+and the charts are packed into a texture atlas.
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item A parameterization is a bijection from a disk-like surface to a planar domain; distortion is
+  measured by the singular values of the per-triangle Jacobian.
+  \item No isometric flattening exists when $K\neq0$ (Theorema Egregium): choose between angles
+  (conformal) and areas (equiareal).
+  \item Spring energies lead to barycentric mappings, $\bu_i=\sum_j\lambda_{ij}\bu_j$, solved as two
+  sparse linear systems; with positive weights and a convex fixed boundary the map is bijective
+  (Tutte, Floater).
+  \item Cotangent weights discretise harmonic maps; mean value weights are always positive; LSCM
+  frees the boundary and minimises the conformal energy with two pinned vertices.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+Show that the singular values of the Jacobian of the Mercator projection at latitude $\varphi$ are
+equal, and compute the area distortion as a function of $\varphi$.
+\end{exercise}
+\begin{exercise}
+For a vertex with three neighbours in the plane, show that the barycentric coordinates are unique
+and positive if the vertex lies inside the triangle of its neighbours.
+\end{exercise}
+\begin{exercise}
+Prove that the conformal energy of LSCM is invariant under $U\mapsto aU+b$ with complex $a,b$.
+Why are two pinned vertices enough to make the minimiser unique?
+\end{exercise}

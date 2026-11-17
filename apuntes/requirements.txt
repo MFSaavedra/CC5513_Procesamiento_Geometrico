@@ -1,0 +1,10 @@
+# Python packages used by the figure scripts in apuntes/scripts
+# (versions used to generate the committed figures in parentheses)
+numpy>=2.0          # 2.5.3
+scipy>=1.13         # 1.18.1
+matplotlib>=3.9     # 3.11.2
+open3d>=0.18        # 0.20.0
+pymeshlab>=2023.12  # 2025.7.post1 (on Linux also needs the system package libopengl0)
+scikit-image>=0.24  # 0.26.0
+scikit-learn>=1.5   # 1.9.1
+Pillow>=10          # 12.3.0
