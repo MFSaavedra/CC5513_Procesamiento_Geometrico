@@ -1,0 +1,68 @@
+\chapter*{Preface}
+\addcontentsline{toc}{chapter}{Preface}
+\markboth{Preface}{Preface}
+
+These notes collect, in one place, the material of the course CC5513 \emph{Procesamiento
+Geom\'etrico y An\'alisis de Formas} (geometry processing and shape analysis) taught at the
+Departamento de Ciencias de la Computaci\'on of the Universidad de Chile. They follow the fourteen
+slide decks of the course (\texttt{Slides/Tema1} to \texttt{Slides/Tema14}) and the six companion
+notebooks, and they expand each topic with derivations, worked examples and figures. Every figure
+was computed for these notes by a Python script in \texttt{apuntes/scripts}, mostly on the meshes
+that ship with the course repository (\texttt{modelos/}) and with the demo packages in
+\texttt{codigo/}; \cref{app:code} explains how to regenerate them.
+
+\section*{How the notes map to the course}
+
+\begin{center}
+\footnotesize
+\begin{tabular}{@{}rlll@{}}
+\toprule
+Chapter & Topic & Slides & Notebook \\
+\midrule
+\ref{ch:intro} & Introduction and pipeline & Tema 1 & \\
+\ref{ch:repr} & 3D representations & Tema 2 & \texttt{Tema02\_Representaciones\_3D} \\
+\ref{ch:ds} & Mesh data structures & Tema 3 & \\
+\ref{ch:diffgeo} & Differential geometry of surfaces & Tema 4 & \texttt{Tema04\_LaplaceBeltrami\_Suavizado} \\
+\ref{ch:smooth} & Laplace--Beltrami operator and smoothing & Tema 4 & \texttt{Tema04\_LaplaceBeltrami\_Suavizado} \\
+\ref{ch:acq} & 3D acquisition & Tema 5 & \\
+\ref{ch:icp} & Local registration (ICP) & Tema 5 & \\
+\ref{ch:global} & Global registration & Tema 6 & \texttt{Tema06\_4PCS\_RANSAC} \\
+\ref{ch:recon} & Normals and surface reconstruction & Tema 7 & \texttt{Tema07\_Normales\_y\_Reconstruccion} \\
+\ref{ch:ops} & Simplification and subdivision & Tema 8 & \\
+\ref{ch:param} & Parameterization & Tema 9 & \\
+\ref{ch:remesh} & Remeshing & Tema 10 & \\
+\ref{ch:deform} & Deformation & Tema 11 & \\
+\ref{ch:shape} & Shape analysis & Tema 12 & \\
+\ref{ch:spectral} & Spectral shape analysis & Tema 13 & \texttt{Tema13\_Analisis\_Espectral} \\
+\ref{ch:fmaps} & Shape matching and functional maps & Tema 14 & \texttt{Tema14\_Shape\_Matching\_Mapas\_Funcionales} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section*{Notation and conventions}
+
+Scalars are italic ($a, \lambda$), vectors bold lower case ($\bx, \bn$) and matrices bold upper
+case ($\mL, \mM$). A triangle mesh is written $\M=(V,E,F)$ with $n=\abs{V}$ vertices, positions
+$\bx_i\in\R^3$ stacked as the rows of $\mX\in\R^{n\times 3}$. $\mathcal N(i)$ is the one-ring of
+vertex $i$ (its adjacent vertices) and $d_i=\abs{\mathcal N(i)}$ its valence. A function sampled at
+the vertices is a vector $\bfun\in\R^n$. The unit normal is $\bn$, the mean curvature
+$H=\tfrac12(\kappa_1+\kappa_2)$ and the Gaussian curvature $K=\kappa_1\kappa_2$.
+
+\paragraph{Laplacian sign convention.} Two conventions coexist in the literature and in the
+course. In \cref{ch:diffgeo,ch:smooth,ch:deform} we use the analyst's Laplacian
+$\Lap f=\Div\grad f$, which is negative semi-definite; its discretisation is
+$\Lap\approx\mM^{-1}\mC$, where $\mC$ is the cotangent \emph{stiffness} matrix (negative
+semi-definite, rows summing to zero) and $\mM$ the lumped mass matrix. With this sign,
+$\Lap\bx=2H\bn$ on a surface with outward normal and mean curvature $H>0$ on spheres.
+In \cref{ch:spectral,ch:fmaps} we follow the spectral geometry literature and use the positive
+operator $L=-\Div\grad$, discretised by $\mL=-\mC$; its eigenproblem is
+$\mL\bphi=\lambda\mM\bphi$ with $0=\lambda_1\le\lambda_2\le\cdots$ and eigenvectors normalised
+by $\mPhi\T\mM\mPhi=\mI$. Each chapter recalls which convention it uses.
+
+\paragraph{Units.} Unless stated otherwise, the meshes are rescaled to unit bounding-box
+diagonal (\cref{ch:repr,ch:diffgeo,ch:smooth,ch:icp,ch:global,ch:recon,ch:ops,ch:param,ch:remesh,ch:deform})
+or to unit surface area (\cref{ch:spectral,ch:fmaps}), so errors and distances are relative.
+
+\paragraph{Reading the figures.} Renderings are orthographic with Lambert shading; colour maps
+encode a scalar field, with the colour range stated in the caption when it matters. Numbers
+quoted in captions are the values printed by the generating script.

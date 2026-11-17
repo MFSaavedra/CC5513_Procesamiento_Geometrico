@@ -1,0 +1,131 @@
+\chapter{Introduction}\label{ch:intro}
+
+Geometry processing studies algorithms that acquire, represent, transform and analyse the shape
+of three-dimensional objects. Shape analysis is the part of the field that extracts meaning from
+geometry: it measures how similar two shapes are, finds corresponding points on them, detects
+symmetries or retrieves a model from a large collection. Both rest on the same toolbox: a
+discrete representation of a surface (usually a triangle mesh or a point cloud), a discrete
+version of differential geometry (normals, curvature, the Laplace--Beltrami operator), and
+numerical linear algebra to turn geometric goals into sparse linear systems or eigenproblems.
+
+\section{Geometry everywhere}
+
+Digital 3D shapes are produced and consumed in many domains:
+\begin{itemize}
+  \item \textbf{Entertainment and design}: characters and environments for films and games are
+  modelled, textured (\cref{ch:param}), simplified for real time rendering (\cref{ch:ops}) and
+  animated by deformation and skinning (\cref{ch:deform}).
+  \item \textbf{Engineering and manufacturing}: CAD models are converted to meshes for
+  simulation and 3D printing; scanned parts are compared against their design by registration
+  (\cref{ch:icp,ch:global}).
+  \item \textbf{Medicine}: organs segmented from CT or MRI volumes are extracted as iso-surfaces
+  (\cref{ch:recon}) and compared across patients through correspondences (\cref{ch:fmaps}).
+  \item \textbf{Cultural heritage}: archaeological artefacts are digitised with laser or
+  structured-light scanners (\cref{ch:acq}), reconstructed, restored by exploiting symmetry and
+  retrieved from digital collections (\cref{ch:shape}).
+  \item \textbf{Robotics, autonomous driving and AR/VR}: depth sensors deliver point clouds at
+  video rate that must be registered, segmented into primitives and interpreted on line.
+\end{itemize}
+
+\section{The geometry processing pipeline}
+
+\Cref{fig:pipeline} organises the course as a pipeline. A physical object is measured by a 3D
+scanner, which produces several partial point clouds, each in the coordinate system of the
+sensor. \emph{Registration} brings the scans into a common frame, first coarsely with feature-based
+or RANSAC-type methods and then precisely with the iterative closest point algorithm.
+\emph{Reconstruction} estimates normals and fits a watertight surface to the merged points. The
+result is then \emph{processed}: noise is removed by smoothing, the number of elements is reduced
+by simplification or increased by subdivision, the element quality is improved by remeshing, a
+planar parameterization is computed for texturing, and the shape can be edited by deformation.
+Finally, \emph{analysis} describes the shape with descriptors that are invariant to the
+transformations we want to ignore (rigid motions, scale, articulated poses) and uses them for
+retrieval, classification and correspondence.
+
+\begin{figure}[tbp]
+\centering
+\begin{tikzpicture}[node distance=4mm and 5mm, every node/.style={font=\small},
+  box/.style={draw, rounded corners=2pt, align=center, minimum height=11mm, text width=23mm, fill=#1},
+  box/.default=white, ar/.style={-{Stealth[length=2.2mm]}, thick}]
+\node[box=MidnightBlue!8] (acq) {Acquisition\\ \footnotesize Ch.~\ref{ch:acq}};
+\node[box=MidnightBlue!8, right=of acq] (reg) {Registration\\ \footnotesize Ch.~\ref{ch:icp}, \ref{ch:global}};
+\node[box=MidnightBlue!8, right=of reg] (rec) {Reconstruction\\ \footnotesize Ch.~\ref{ch:recon}};
+\node[box=OliveGreen!10, right=of rec, text width=30mm, minimum height=24mm] (proc)
+  {Processing\\ \footnotesize smoothing (\ref{ch:smooth})\\ simplification, subdivision (\ref{ch:ops})\\
+   parameterization (\ref{ch:param})\\ remeshing (\ref{ch:remesh})\\ deformation (\ref{ch:deform})};
+\node[box=BrickRed!8, below=9mm of rec, text width=52mm] (ana)
+  {Analysis: descriptors, retrieval, symmetry (\ref{ch:shape}),\\ spectral analysis (\ref{ch:spectral}),
+   correspondences (\ref{ch:fmaps})};
+\node[box=black!4, below=9mm of acq, text width=40mm] (found)
+  {Foundations: representations (\ref{ch:repr}), data structures (\ref{ch:ds}),
+   differential geometry (\ref{ch:diffgeo})};
+\draw[ar] (acq) -- node[above, font=\scriptsize]{scans} (reg);
+\draw[ar] (reg) -- node[above, font=\scriptsize]{points} (rec);
+\draw[ar] (rec) -- node[above, font=\scriptsize]{mesh} (proc);
+\draw[ar] (proc.south) |- (ana.east);
+\draw[ar, dashed] (found.east) -- (ana.west);
+\end{tikzpicture}
+\caption{The geometry processing pipeline followed by the course. Numbers refer to chapters.}
+\label{fig:pipeline}
+\end{figure}
+
+\section{Discrete surfaces as signals}
+
+A recurring idea, made explicit by \citet{Taubin1995,Taubin2000}, is to treat the vertex
+positions of a mesh as a signal defined on the surface. In classical signal processing the
+Fourier basis diagonalises the second derivative: $\frac{\dd^2}{\dd x^2}e^{\mathrm{i}\omega x}=
+-\omega^2e^{\mathrm{i}\omega x}$, so low frequencies are the slowly varying functions with small
+$\omega^2$. On a surface the role of the second derivative is played by the Laplace--Beltrami
+operator, and its eigenfunctions form a \emph{manifold harmonic} basis \citep{Vallet2008}. Noise
+lives in the high frequencies, so smoothing is low-pass filtering (\cref{ch:smooth}); the lowest
+frequencies encode the global shape, are invariant to bending without stretching, and are the
+basis of spectral descriptors and functional maps (\cref{ch:spectral,ch:fmaps}). This single
+operator links half of the chapters of these notes.
+
+\fig[0.95\textwidth]{ch01_gallery.png}{Models used throughout the notes: the Stanford bunny and
+armadillo, the fandisk CAD part, the Max Planck bust, a cat and a horse from the TOSCA collection
+(available in several poses in \texttt{modelos/}), an elephant and the cow ``Spot''.}{fig:gallery}
+
+\section{Discrete versus smooth geometry}
+
+Real objects are smooth (or piecewise smooth) surfaces, but a computer stores a finite sample.
+Throughout the course we ask two questions about every discrete quantity: what is the smooth
+quantity it approximates, and does the approximation converge when the mesh is refined? Some
+constructions are exact in a precise sense, for example the angle defect satisfies a discrete
+Gauss--Bonnet theorem for any triangle mesh (\cref{ch:diffgeo}). Others depend on the quality of
+the triangulation, for example the cotangent Laplacian has negative weights on obtuse triangles,
+which is one motivation for remeshing (\cref{ch:remesh}). A classical result of
+\citet{Wardetzky2007} shows that no discrete Laplacian can have all the properties of the smooth
+one at the same time (\cref{ch:spectral}), so every method embodies a compromise.
+
+\section{Tools}
+
+The examples are written in Python with \texttt{numpy} and \texttt{scipy} (dense and sparse
+linear algebra, KD-trees, sparse eigensolvers) and \texttt{matplotlib}. Mesh input/output, ray
+casting and some reference implementations come from Open3D \citep{Zhou2018}, PyMeshLab
+\citep{Cignoni2008} and scikit-image. Other widely used libraries are libigl, CGAL, OpenMesh,
+trimesh and Polyscope. The standard references for the course are the book by
+\citet{Botsch2010} and the discrete differential geometry notes of \citet{Crane2018}; the
+differential geometry background is in \citet{doCarmo1976}.
+
+\section{Roadmap}
+
+\Cref{ch:repr,ch:ds,ch:diffgeo} build the foundations: how surfaces are represented, how meshes
+are stored and traversed, and how normals and curvature are computed on them.
+\Cref{ch:smooth} introduces the Laplace--Beltrami operator through mesh smoothing.
+\Cref{ch:acq,ch:icp,ch:global,ch:recon} follow the acquisition pipeline: scanners, local and
+global registration, normal estimation and surface reconstruction.
+\Cref{ch:ops,ch:param,ch:remesh,ch:deform} cover mesh processing operations. Finally,
+\cref{ch:shape,ch:spectral,ch:fmaps} turn to shape analysis: global and local descriptors,
+spectral analysis and shape matching with functional maps. Two appendices summarise the linear
+algebra used throughout and index the code.
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item The course follows a pipeline: acquisition, registration, reconstruction, processing and
+  analysis.
+  \item Discrete operators must approximate smooth ones; convergence and robustness to the mesh
+  quality are recurring concerns.
+  \item The Laplace--Beltrami operator plays the role of the second derivative and its
+  eigenfunctions generalise the Fourier basis to surfaces.
+\end{itemize}
+\end{keypoints}

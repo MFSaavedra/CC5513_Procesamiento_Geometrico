@@ -1,0 +1,154 @@
+% ---------------------------------------------------------------------------
+% Preamble for the CC5513 lecture notes
+% ---------------------------------------------------------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[a4paper,textwidth=155mm,top=27mm,bottom=30mm,hmarginratio=1:1,headsep=9mm]{geometry}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm}
+\usepackage{graphicx}
+\usepackage{booktabs,tabularx,multirow,array}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,calc,positioning,decorations.markings,shapes.geometric,fit,backgrounds}
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+\usepackage{listings}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage[font=small,labelfont=bf,margin=4mm]{caption}
+\usepackage{subcaption}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{fancyhdr}
+\usepackage[colorlinks=true,linkcolor=MidnightBlue,citecolor=OliveGreen,urlcolor=RoyalBlue]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+
+\graphicspath{{figs/}}
+\setlist{itemsep=2pt,topsep=4pt}
+\setlength{\parskip}{2pt}
+\renewcommand{\bibname}{References}
+
+% ------------------------------------------------------------------ headers
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE]{\small\nouppercase{\leftmark}}
+\fancyhead[RO]{\small\nouppercase{\rightmark}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\small\thepage}\renewcommand{\headrulewidth}{0pt}}
+
+% ------------------------------------------------------------------ theorems
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{exercise}{Exercise}[chapter]
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\tcbset{colback=white,boxrule=0.5pt,arc=1.5pt,left=4pt,right=4pt,top=3pt,bottom=3pt,
+        fonttitle=\bfseries\small,breakable}
+\newtcbtheorem[number within=chapter]{example}{Example}%
+  {colframe=MidnightBlue!70,colbacktitle=MidnightBlue!8,coltitle=black,colback=MidnightBlue!2}{ex}
+\newtcolorbox{notebook}[1]{colframe=OliveGreen!70,colback=OliveGreen!3,colbacktitle=OliveGreen!10,
+  coltitle=black,title={Companion notebook: \texttt{#1}}}
+\newtcolorbox{keypoints}{colframe=BrickRed!60,colback=BrickRed!2,colbacktitle=BrickRed!8,
+  coltitle=black,title={Key points}}
+
+% ------------------------------------------------------------------ algorithms
+\SetAlgoSkip{medskip}
+\SetKwInOut{Input}{Input}
+\SetKwInOut{Output}{Output}
+\SetAlFnt{\small}
+\SetAlCapFnt{\small}
+\crefname{algocf}{Algorithm}{Algorithms}
+\Crefname{algocf}{Algorithm}{Algorithms}
+\crefname{example}{Example}{Examples}
+\crefname{tcb@cnt@example}{Example}{Examples}
+\crefname{exercise}{Exercise}{Exercises}
+
+% ------------------------------------------------------------------ listings
+\lstset{basicstyle=\ttfamily\footnotesize,keywordstyle=\color{MidnightBlue}\bfseries,
+  commentstyle=\color{OliveGreen},stringstyle=\color{BrickRed},showstringspaces=false,
+  frame=single,rulecolor=\color{black!25},breaklines=true,columns=fullflexible,
+  language=Python,xleftmargin=2pt,xrightmargin=2pt,aboveskip=6pt,belowskip=4pt}
+
+% ------------------------------------------------------------------ notation
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\M}{\mathcal{M}}
+\newcommand{\NN}{\mathcal{N}}
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\by}{\mathbf{y}}
+\newcommand{\bz}{\mathbf{z}}
+\newcommand{\bp}{\mathbf{p}}
+\newcommand{\bq}{\mathbf{q}}
+\newcommand{\bn}{\mathbf{n}}
+\newcommand{\bu}{\mathbf{u}}
+\newcommand{\bv}{\mathbf{v}}
+\newcommand{\bc}{\mathbf{c}}
+\newcommand{\bd}{\mathbf{d}}
+\newcommand{\be}{\mathbf{e}}
+\newcommand{\bt}{\mathbf{t}}
+\newcommand{\bb}{\mathbf{b}}
+\newcommand{\bw}{\mathbf{w}}
+\newcommand{\bfun}{\mathbf{f}}
+\newcommand{\bg}{\mathbf{g}}
+\newcommand{\bzero}{\mathbf{0}}
+\newcommand{\mA}{\mathbf{A}}
+\newcommand{\mB}{\mathbf{B}}
+\newcommand{\mC}{\mathbf{C}}
+\newcommand{\mD}{\mathbf{D}}
+\newcommand{\mE}{\mathbf{E}}
+\newcommand{\mG}{\mathbf{G}}
+\newcommand{\mH}{\mathbf{H}}
+\newcommand{\mI}{\mathbf{I}}
+\newcommand{\mJ}{\mathbf{J}}
+\newcommand{\mK}{\mathbf{K}}
+\newcommand{\mL}{\mathbf{L}}
+\newcommand{\mM}{\mathbf{M}}
+\newcommand{\mP}{\mathbf{P}}
+\newcommand{\mQ}{\mathbf{Q}}
+\newcommand{\mR}{\mathbf{R}}
+\newcommand{\mS}{\mathbf{S}}
+\newcommand{\mT}{\mathbf{T}}
+\newcommand{\mU}{\mathbf{U}}
+\newcommand{\mV}{\mathbf{V}}
+\newcommand{\mW}{\mathbf{W}}
+\newcommand{\mX}{\mathbf{X}}
+\newcommand{\mY}{\mathbf{Y}}
+\newcommand{\mPhi}{\boldsymbol{\Phi}}
+\newcommand{\mPsi}{\boldsymbol{\Psi}}
+\newcommand{\mLambda}{\boldsymbol{\Lambda}}
+\newcommand{\mPi}{\boldsymbol{\Pi}}
+\newcommand{\mSigma}{\boldsymbol{\Sigma}}
+\newcommand{\bdelta}{\boldsymbol{\delta}}
+\newcommand{\bphi}{\boldsymbol{\phi}}
+\newcommand{\Lap}{\Delta}
+\newcommand{\T}{^{\mathsf{T}}}
+\newcommand{\norm}[1]{\left\lVert #1\right\rVert}
+\newcommand{\abs}[1]{\left\lvert #1\right\rvert}
+\newcommand{\inner}[2]{\left\langle #1,#2\right\rangle}
+\newcommand{\dd}{\,\mathrm{d}}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator{\tr}{tr}
+\DeclareMathOperator{\diag}{diag}
+\DeclareMathOperator{\Div}{div}
+\DeclareMathOperator{\area}{area}
+\DeclareMathOperator{\vol}{vol}
+\DeclareMathOperator{\sgn}{sgn}
+\DeclareMathOperator{\rank}{rank}
+\DeclareMathOperator{\atanh}{atanh}
+\newcommand{\grad}{\nabla}
+
+% figure helper: \fig[width]{file}{caption}{label}
+\newcommand{\fig}[4][\textwidth]{%
+  \begin{figure}[tbp]\centering\includegraphics[width=#1]{#2}\caption{#3}\label{#4}\end{figure}}
+% figure at natural size
+\newcommand{\fign}[3]{%
+  \begin{figure}[tbp]\centering\includegraphics{#1}\caption{#2}\label{#3}\end{figure}}
