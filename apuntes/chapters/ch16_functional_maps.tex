@@ -104,12 +104,12 @@ close, the commutativity with the Laplacian.}{fig:cmatrix}
 
 With $\mC$, transferring a function is a matrix--vector product in the spectral domain:
 $\bg=\mPhi_\NN\mC\mPhi_\M\T\mM_\M\bfun$. Segmentations are transferred by mapping the indicator of each
-segment and taking, at every point, the label with the largest value (\cref{fig:transfer}). A small
+segment and taking, at every point, the label with the largest value (\cref{fig:fmap-transfer}). A small
 basis already transfers smooth functions well; sharp boundaries need more coefficients.
 
 \fig{ch16_transfer.png}{Transfer of an eight-part segmentation from $\M$ (left) to $\NN$ with the
 ground-truth functional map truncated to $k=5$, $20$ and $80$ eigenfunctions. The fraction of correctly
-labelled vertices grows from $70\%$ to $97\%$ and $100\%$.}{fig:transfer}
+labelled vertices grows from $70\%$ to $97\%$ and $100\%$.}{fig:fmap-transfer}
 
 \section{From a functional map to a pointwise map}
 
@@ -167,10 +167,10 @@ nearest-neighbour search and a projection. It is simple, fast, and very effectiv
 \fig{ch16_pipeline.png}{The matching pipeline on the two cats, visualised by transferring a colour
 function (the coordinates of $\M$) to $\NN$. From left: the source, the map recovered from the initial
 estimate ($k=20$, WKS plus heat kernels of five landmarks), after spectral ICP, after ZoomOut from
-$k=20$ to $k=120$, and the ground truth.}{fig:pipeline}
+$k=20$ to $k=120$, and the ground truth.}{fig:fmap-pipeline}
 
 \fig[0.85\textwidth]{ch16_errors.pdf}{Left: cumulative geodesic error (shapes of unit area) of the maps
-of \cref{fig:pipeline}, with medians $0.038$ (initial), $0.025$ (spectral ICP), $0.0094$ (ZoomOut) and
+of \cref{fig:fmap-pipeline}, with medians $0.038$ (initial), $0.025$ (spectral ICP), $0.0094$ (ZoomOut) and
 $0.0053$ for the map recovered from the exact $\mC$ with $k=120$. Right: median error of the map
 recovered from the exact functional map against the size of the basis.}{fig:fmap-errors}
 

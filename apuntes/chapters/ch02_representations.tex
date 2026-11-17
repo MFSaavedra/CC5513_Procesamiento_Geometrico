@@ -124,8 +124,9 @@ toggling inside/outside at every surface crossing (parity rule). The volume of a
 approximated by the number of occupied cells times the cell volume.
 
 \fig[0.8\textwidth]{ch02_voxel_resolution.png}{Surface voxelization of the bunny at resolutions
-$n=12,24,48$. Only a small fraction of the $n^3$ cells is occupied, and the fraction decreases
-like $1/n$, which motivates sparse and adaptive grids.}{fig:voxels}
+$n=12,24,48$. The occupied cells are $432$, $1832$ and $7437$, that is $25\%$, $13\%$ and $6.7\%$ of
+the $n^3$ cells: the count grows like $n^2$ and the fraction decreases like $1/n$, which motivates
+sparse and adaptive grids.}{fig:voxels}
 
 \subsection{Adaptive grids}
 

@@ -119,8 +119,9 @@ where the planes agree.}{fig:qem-levels}
 \fig{ch10_qem_compare.png}{Comparison of simplification criteria on the cow. Left: mean distance
 to the original mesh (per mille of the bounding-box diagonal) against the number of faces. Right:
 results with about 200 faces (QEM and shortest edge first exactly 200, vertex clustering 225 with
-the closest grid size). QEM is consistently the most accurate; clustering loses the legs and the
-head first.}{fig:qem-compare}
+the closest grid size). QEM is about three times more accurate than the other two criteria, which
+behave similarly; at 200 faces it still preserves the legs, the ears and the head, which the others
+distort.}{fig:qem-compare}
 
 \paragraph{Progressive meshes.} Recording the sequence of collapses yields a multiresolution
 representation: the coarsest mesh plus the inverse operations (vertex splits), which can be
@@ -208,7 +209,7 @@ $n$-gon for every vertex of valence $n$. The limit is $C^1$.
 \centering\small
 \begin{tabular}{@{}lllll@{}}
 \toprule
-Scheme & Mesh & Type & Behaviour & Smoothness (regular / extraordinary) \\
+Scheme & Mesh & Type & Behaviour & Smoothness (regular/extraord.) \\
 \midrule
 Chaikin & curves & dual & approximating & $C^1$ \\
 Cubic B-spline & curves & primal & approximating & $C^2$ \\
@@ -228,7 +229,7 @@ Loop (applied to the triangulated cube) at levels 0, 1, 2 and 4. All three conve
 shapes; Loop's limit is less symmetric because the triangulation of the cube is not
 symmetric.}{fig:subdivision}
 
-\fig{ch10_loop_bunny.png}{Loop subdivision of a 400-face bunny. Each level multiplies the number of
+\fig{ch10_loop_bunny.png}{Loop subdivision of a bunny with 399 faces. Each level multiplies the number of
 faces by four; the limit is smooth but, since the scheme approximates, it shrinks slightly away from
 the control mesh.}{fig:loop-bunny}
 

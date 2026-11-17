@@ -113,9 +113,9 @@ the camera create holes.
   \draw (3.45,0) arc (180:118:0.55); \node at (3.25,0.32) {$\beta$};
   \draw[fill=black!10] (L) ++(-0.25,-0.2) rectangle ++(0.5,0.4);
   \draw[fill=MidnightBlue!15] (Cm) ++(-0.3,-0.22) rectangle ++(0.6,0.44);
-  \node[below=5pt] at (Cm) {camera};
+  \node at ($(Cm)+(0.15,-0.55)$) {camera};
   % stereo sketch
-  \begin{scope}[xshift=6.6cm]
+  \begin{scope}[xshift=7.9cm]
     \coordinate (O1) at (0,0); \coordinate (O2) at (3,0); \coordinate (Q) at (1.2,3.0);
     \draw[thick] (O1) -- node[below] {$B$} (O2);
     \draw (-0.6,0.6) -- (0.6,0.6); \draw (2.4,0.6) -- (3.6,0.6);

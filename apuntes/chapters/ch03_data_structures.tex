@@ -198,8 +198,8 @@ Structure & Bytes per vertex & One-ring query & Arbitrary polygons \\
 \midrule
 Face set (STL) & 72 & no connectivity & yes \\
 Indexed face set (OBJ/OFF) & 36 & $O(F)$ & yes \\
-Face-based connectivity & 64 & $O(1)$ per step, case distinctions & no \\
-Winged edge & 120 & $O(1)$ per step, case distinctions & yes \\
+Face-based connectivity & 64 & $O(1)$, case analysis & no \\
+Winged edge & 120 & $O(1)$, case analysis & yes \\
 Half-edge & 120--144 & $O(1)$ per step & yes \\
 Directed edges / corner table & 64 & $O(1)$ per step & triangles only \\
 \bottomrule

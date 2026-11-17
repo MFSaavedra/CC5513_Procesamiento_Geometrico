@@ -61,9 +61,12 @@ $\norm{\mA\bx-\bb}^2$ and satisfies the \emph{normal equations} $\mA\T\mA\bx=\mA
 solved with a Cholesky factorisation of $\mA\T\mA$ when $\mA$ is well conditioned and sparse, and with a
 QR factorisation or the SVD otherwise, since forming $\mA\T\mA$ squares the condition number.
 
-\paragraph{Weighted and regularised problems.} Soft constraints add weighted rows:
-$\min\norm{\mA\bx-\bb}^2+w^2\norm{\mS\bx-\bc}^2$ gives $(\mA\T\mA+w^2\mS\T\mS)\bx=\mA\T\bb+w^2\mS\T\bc$, as in
-Laplacian editing (\cref{ch:deform}). Tikhonov regularisation adds $\rho\norm{\bx}^2$, giving
+\paragraph{Weighted and regularised problems.} Soft constraints add weighted rows: minimising
+$\norm{\mA\bx-\bb}^2+w^2\norm{\mS\bx-\bc}^2$ leads to
+\begin{equation}
+(\mA\T\mA+w^2\mS\T\mS)\bx=\mA\T\bb+w^2\mS\T\bc ,
+\end{equation}
+as in Laplacian editing (\cref{ch:deform}). Tikhonov regularisation adds $\rho\norm{\bx}^2$, giving
 $(\mA\T\mA+\rho\mI)\bx=\mA\T\bb$, as in smoothing RBF interpolation (\cref{ch:recon}).
 
 \paragraph{Hard constraints.} $\min\norm{\mA\bx-\bb}^2$ subject to $\mathbf E\bx=\bd$ is solved either by

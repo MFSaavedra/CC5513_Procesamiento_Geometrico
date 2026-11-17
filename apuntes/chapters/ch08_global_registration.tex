@@ -39,8 +39,10 @@ changes when shifted. For an image $I$, the weighted auto-correlation of a shift
 y)$ is, to first order,
 \begin{equation}
 c(\Delta x,\Delta y)=\sum_{(x,y)}w(x,y)\bigl(I(x+\Delta x,y+\Delta y)-I(x,y)\bigr)^2\approx
-(\Delta x,\Delta y)\,\mE\,(\Delta x,\Delta y)\T ,\quad
-\mE=\sum w\begin{pmatrix}I_x^2&I_xI_y\\I_xI_y&I_y^2\end{pmatrix},
+(\Delta x,\Delta y)\,\mE\,(\Delta x,\Delta y)\T ,
+\end{equation}
+\begin{equation}
+\mE=\sum_{(x,y)}w(x,y)\begin{pmatrix}I_x^2&I_xI_y\\I_xI_y&I_y^2\end{pmatrix},
 \end{equation}
 with a Gaussian window $w$. The local structure is determined by the eigenvalues of $\mE$: both
 small in flat regions, one large along an edge, both large at a corner. The Harris operator
@@ -147,7 +149,9 @@ list are discarded.
 The surviving correspondences are grouped into mutually consistent sets. A weighted measure
 favours correspondences that are far apart (they constrain the transformation better):
 \begin{equation}
-w_{gc}(c_1,c_2)=\frac{d_{gc}(c_1,c_2)}{1-\exp\!\bigl(-(\norm{S_{\mathbf{m}_2}(\mathbf{m}_1)}+\norm{S_{\bs_2}(\bs_1)})/(2\gamma)\bigr)},\qquad
+w_{gc}(c_1,c_2)=\frac{d_{gc}(c_1,c_2)}{1-\exp\!\bigl(-(\norm{S_{\mathbf{m}_2}(\mathbf{m}_1)}+\norm{S_{\bs_2}(\bs_1)})/(2\gamma)\bigr)},
+\end{equation}
+\begin{equation}
 W_{gc}(c,G)=\max_{c'\in G}\max\bigl(w_{gc}(c,c'),w_{gc}(c',c)\bigr),
 \end{equation}
 where $W_{gc}(c,G)$ measures the consistency between a correspondence and a group $G$. For each
