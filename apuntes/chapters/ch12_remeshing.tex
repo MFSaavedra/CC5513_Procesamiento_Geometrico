@@ -1,0 +1,172 @@
+\chapter{Remeshing}\label{ch:remesh}
+
+Meshes produced by scanners, marching cubes or simplification usually have poorly shaped
+triangles: slivers with tiny angles, vertices of very high or very low valence, and a density that
+has nothing to do with the geometry. Such meshes are bad inputs for later stages: the cotangent
+Laplacian acquires negative weights and huge eigenvalues (\cref{ch:smooth}), finite element
+simulations become ill-conditioned, and deformations look jagged. Given a manifold mesh,
+\emph{remeshing} computes another mesh that satisfies quality requirements and approximates the
+original well. This chapter follows Tema 10 and the survey of \citet{Alliez2008}.
+
+\section{Quality requirements}
+
+\paragraph{Local structure.}
+\begin{itemize}
+  \item \emph{Element type}: triangles or quadrilaterals.
+  \item \emph{Element shape}: isotropic (equilateral triangles, squares) or anisotropic
+  (elements stretched along a direction, typically a principal curvature direction).
+  \item \emph{Element distribution}: uniform, or adaptive with smaller elements where the
+  curvature is high.
+  \item \emph{Element alignment}: edges along sharp features and curvature lines, which preserves
+  the shape with fewer elements.
+\end{itemize}
+
+\paragraph{Global structure.} In a triangle mesh a vertex is \emph{regular} if its valence is 6 (4
+on the boundary), the value that Euler's formula makes the average (\cref{ch:repr}). Meshes are
+classified as \emph{irregular} (arbitrary valences), \emph{semi-regular} (obtained by regular
+subdivision of a coarse mesh, so that irregular vertices are isolated; useful for modelling and
+multiresolution), \emph{highly regular} (most vertices regular; preferred for numerical
+simulation) and \emph{regular} (all vertices regular, possible only for special topologies such as
+the torus).
+
+\section{Isotropic remeshing}
+
+Three strategies exist: \emph{incremental} remeshing, which is easy to implement, robust, needs
+no parameterization and is efficient for high-resolution meshes; \emph{variational} remeshing,
+which minimises an energy, usually over a parameterization, which makes it expensive and limits it
+to simpler meshes; and \emph{greedy} methods, which insert or remove vertices one at a time
+according to a priority.
+
+\subsection{Incremental remeshing}
+
+The algorithm of \citet{Botsch2004} applies only the local operators of \cref{ch:ds}. Given a target
+edge length $L$, it iterates (typically 5 to 10 times) the following steps.
+\begin{enumerate}
+  \item \textbf{Split} every edge longer than $\tfrac43L$ at its midpoint.
+  \item \textbf{Collapse} every edge shorter than $\tfrac45L$ into its midpoint, unless the collapse
+  would create an edge longer than $\tfrac43L$ or violate the link condition.
+  \item \textbf{Flip} every edge whose flip reduces the total deviation of the valences of its four
+  vertices from their targets (6 for interior vertices, 4 for boundary vertices), that is, which
+  reduces $\sum_{v}(\mathrm{val}(v)-\mathrm{val}^\star(v))^2$ over the four vertices.
+  \item \textbf{Relax} the vertices tangentially: move every vertex towards the barycentre $\bg_i$
+  of its one-ring, but only within its tangent plane,
+  $\bx_i\leftarrow\bg_i+\bn_i\bn_i\T(\bx_i-\bg_i)$, a uniform Laplacian smoothing step without its
+  normal component (or with area weights, which equalises the triangle sizes).
+  \item \textbf{Project} the vertices back onto the original surface (closest point via a
+  bounded volume hierarchy or a kd-tree).
+\end{enumerate}
+The split threshold follows from asking that a split reduce the deviation from the target:
+$\abs{\ell/2-L}<\abs{\ell-L}$ holds exactly when $\ell>\tfrac43L$. The collapse threshold is the
+analogous choice on the short side, and the test that a collapse never creates an edge longer than
+$\tfrac43L$ prevents splits and collapses from undoing each other. After a few iterations almost all
+edges have lengths in $[\tfrac45L,\tfrac43L]$, the flips have driven the valences towards 6, and the
+relaxation has made the triangles nearly equilateral (\cref{fig:remeshing}).
+
+\fig{ch12_remeshing.png}{Remeshing of the Max Planck bust after aggressive QEM decimation. Left to
+right: input, isotropic incremental remeshing, and adaptive remeshing with the target length
+depending on curvature. Right: the minimum angle per triangle concentrates near $60^\circ$ and the
+valence near 6 after isotropic remeshing.}{fig:remeshing}
+
+\subsection{Adaptive remeshing and features}
+
+For \emph{adaptive} remeshing, compute the maximal absolute principal curvature $\kappa_{\max}$ at
+every vertex and derive a local target length from it. Approximate the surface locally by a sphere
+of radius $r=1/\kappa_{\max}$ and place an equilateral triangle of side $L$ with its corners on the
+sphere. Its circumradius is $\rho=L/\sqrt3$, and the distance between the centre of the triangle
+and the sphere is $\varepsilon=r-\sqrt{r^2-\rho^2}$, so $\rho^2=2r\varepsilon-\varepsilon^2$ and the
+side that achieves a tolerance $\varepsilon$ is
+\begin{equation}
+L(\bx)=\sqrt{\frac{6\varepsilon}{\kappa_{\max}(\bx)}-3\varepsilon^2}\approx\sqrt{\frac{6\varepsilon}{\kappa_{\max}(\bx)}},
+\end{equation}
+clamped to a range $[L_{\min},L_{\max}]$. The split and collapse tests then compare each edge with
+the average target length of its two endpoints.
+
+\emph{Features} such as creases (large dihedral angles) and material boundaries must survive
+remeshing. Feature edges and corner vertices are marked first, and the operators are adjusted:
+corner vertices are never moved or collapsed, feature edges are never flipped, collapses are
+allowed only along features (a feature vertex may only collapse into a neighbouring feature vertex
+along the feature), relaxation of feature vertices is restricted to the feature curve, and they are
+projected onto the feature curves instead of the surface.
+
+\subsection{Variational remeshing}
+
+Variational methods distribute the vertices by minimising an energy. The most common is the
+\emph{centroidal Voronoi tessellation} (CVT). A Voronoi diagram partitions a domain into the cells
+closest to each of a set of sites $\{\bz_i\}$; its dual is the Delaunay triangulation. Given a
+density $\rho$, the CVT energy
+\begin{equation}
+E_{\mathrm{CVT}}=\sum_i\int_{V_i}\rho(\bx)\norm{\bx-\bz_i}^2\dd\bx
+\end{equation}
+is minimised when every site coincides with the centroid of its own cell, the definition of a
+centroidal Voronoi tessellation \citep{Du1999}. \emph{Lloyd's relaxation} \citep{Lloyd1982}
+alternates the two optimality conditions: compute the Voronoi diagram of the current sites, then
+move each site to the centroid of its cell; the energy decreases monotonically
+(\cref{fig:lloyd}). The dual Delaunay triangulation of a CVT has nearly equilateral triangles. On a
+surface, the variational remeshing pipeline is:
+\begin{enumerate}
+  \item compute a conformal parameterization of the mesh (\cref{ch:param});
+  \item compute a density in the parameter domain that accounts for the area distortion of the map
+  and the desired sizing (for example from curvature);
+  \item in the 2D domain, sample points according to the density and run Lloyd's relaxation to
+  obtain a CVT;
+  \item lift the 2D Delaunay triangulation of the sites back to 3D through the parameterization.
+\end{enumerate}
+
+\fig{ch12_lloyd.pdf}{Lloyd's relaxation of 60 random sites in the unit square. Black dots are the
+sites and red crosses the centroids of their Voronoi cells. After a few iterations sites and
+centroids almost coincide and the cells become regular hexagons in the interior; the CVT energy
+decreases monotonically and stalls after about 20 iterations.}{fig:lloyd}
+
+\section{Anisotropic remeshing}
+
+Models designed by artists have anisotropic tessellations: long elements follow the directions in
+which the surface bends little, and short elements cross the directions in which it bends a lot.
+A cylinder, for example, needs many vertices around it but few along it. Differential geometry
+provides the right local frame: the directions of minimal and maximal curvature, plus the normal.
+\Citet{Alliez2003} build such meshes in the following steps:
+\begin{enumerate}
+  \item \textbf{Curvature tensor}: estimate the 3D curvature tensor at the vertices
+  (\cref{ch:diffgeo}) and classify regions as isotropic (umbilic, $\kappa_1\approx\kappa_2$) or
+  anisotropic.
+  \item \textbf{Principal direction field}: smooth the fields of minimal and maximal curvature
+  directions, which are noisy and not defined at umbilics.
+  \item \textbf{Flattening}: parameterize the (disk-like, possibly cut) surface conformally, so that
+  the two orthogonal direction fields become orthogonal fields in 2D. Such fields have regular
+  regions and singularities (umbilics), where the field rotates by a multiple of $\pi/2$ around the
+  point.
+  \item \textbf{Lines of curvature}: trace streamlines of both fields in 2D, with a spacing that
+  depends on the corresponding curvature; in isotropic regions, where lines are meaningless,
+  place points (\emph{umbilic} samples) instead.
+  \item \textbf{Overlay}: intersect the two families of lines; the intersections are the
+  \emph{vertices}, the segments between consecutive intersections the \emph{edges}, producing a
+  mesh of mostly quadrilaterals aligned with the principal directions.
+  \item \textbf{Clean up}: resolve T-junctions where lines end, triangulate the isotropic regions,
+  apply a light smoothing, and lift the result to 3D.
+\end{enumerate}
+The result is a quad-dominant mesh that captures the shape with far fewer elements than an
+isotropic mesh of the same accuracy.
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item Remeshing improves element shape, valence and sampling while approximating the input.
+  \item Incremental isotropic remeshing iterates split ($>\tfrac43L$), collapse ($<\tfrac45L$),
+  valence-improving flips, tangential relaxation and projection.
+  \item Adaptive remeshing sets $L$ from the maximal curvature; feature preservation restricts the
+  operators on creases and corners.
+  \item Variational remeshing computes a centroidal Voronoi tessellation with Lloyd's relaxation in
+  a parameter domain; anisotropic remeshing traces lines of curvature and overlays them.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+Show that a closed triangle mesh in which every vertex has valence 6 must have genus one.
+\end{exercise}
+\begin{exercise}
+Suppose the test that forbids collapses creating edges longer than $\tfrac43L$ is removed. Construct
+a configuration in which a split and a collapse undo each other indefinitely.
+\end{exercise}
+\begin{exercise}
+For uniform density in 1D, show that Lloyd's relaxation of $n$ sites in $[0,1]$ converges to equally
+spaced sites at $(2i-1)/(2n)$.
+\end{exercise}

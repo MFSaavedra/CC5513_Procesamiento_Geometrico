@@ -1,0 +1,346 @@
+\chapter{The Laplace--Beltrami Operator and Mesh Smoothing}\label{ch:smooth}
+
+Scanned meshes are noisy: measurement errors move every vertex a little along and across the
+surface. Smoothing removes this noise while keeping the shape. The tool for the job is the
+Laplace--Beltrami operator, which plays on surfaces the role that the second derivative plays on
+the real line. This chapter derives its discretisations, studies its eigenfunctions as a Fourier
+basis, and analyses the diffusion flows that smooth a mesh. It follows the slides of Tema 4 and the
+companion notebook. We use $\Lap=\Div\grad$ (negative semi-definite) and its discretisation
+$\mM^{-1}\mC$; the eigenvalues are written as positive numbers $\lambda$ with
+$-\mC\bphi=\lambda\mM\bphi$.
+
+\section{Smoothing as filtering}
+
+On the circle, a function $f(x)=\sum_kc_ke^{\mathrm ikx}$ is a sum of oscillations of frequency
+$k$, and each one is an eigenfunction of the second derivative:
+$\Lap e^{\mathrm ikx}=-k^2e^{\mathrm ikx}$. The Laplacian therefore multiplies high frequencies by
+large factors. The \emph{heat equation} $\partial_tf=\Lap f$ has the solution
+\begin{equation}
+f(x,t)=\sum_kc_ke^{-k^2t}e^{\mathrm ikx}:
+\end{equation}
+every mode decays at a rate equal to its eigenvalue, so diffusion is a low-pass filter whose cut-off
+frequency decreases with time (\cref{fig:heat1d}). The noise of a scan lives in high frequencies
+and the shape in low frequencies, so we need the analogue of $\Lap$, of its eigenfunctions and of
+the heat equation on a surface.
+
+\fig[0.85\textwidth]{ch05_heat1d.pdf}{Left: for $f=\sin3x+0.3\sin25x$, the Laplacian multiplies
+the slow mode by $9$ and the fast one by $625$, so $\Lap f$ (scaled by $1/400$) is dominated by
+the fast mode. Right: the heat equation damps every mode as $e^{-k^2t}$, removing the fast
+oscillation long before the slow one changes.}{fig:heat1d}
+
+\section{The Laplace--Beltrami operator}
+
+On a surface $S$, the gradient $\grad_Sf$ of a function is the tangent vector field that gives the
+directional derivatives, $\dd f(\bw)=\inner{\grad_Sf}{\bw}$; the divergence of a tangent field
+measures its net outflow per unit area; and the Laplace--Beltrami operator is
+$\Lap_Sf=\Div_S\grad_Sf$. In a parameterization with metric $\mathbf I=(g_{ij})$,
+\begin{equation}
+\Lap_Sf=\frac{1}{\sqrt{\det g}}\sum_{i,j}\partial_i\!\left(\sqrt{\det g}\,g^{ij}\partial_jf\right),
+\end{equation}
+which depends only on the metric, so $\Lap_S$ is intrinsic. Its key properties are:
+\begin{itemize}
+  \item $\Lap_S$ annihilates constants, and on a closed surface only constants are harmonic;
+  \item Green's identity $\int_Sg\Lap_Sf\dd A=-\int_S\inner{\grad_Sf}{\grad_Sg}\dd A$ makes it
+  symmetric and negative semi-definite;
+  \item it is local: $(\Lap_Sf)(\bx)$ depends only on $f$ near $\bx$;
+  \item applied to the coordinates it gives the mean curvature normal, $\Lap_S\bx=-2H\bn$
+  (\cref{ch:diffgeo}).
+\end{itemize}
+
+\section{Discretisations}
+
+\subsection{The uniform Laplacian}
+
+The simplest discretisation uses only the connectivity:
+\begin{equation}
+(\mL_u\bfun)_i=\frac1{d_i}\sum_{j\in\mathcal N(i)}(f_j-f_i),
+\end{equation}
+the difference between the average of the neighbours and the vertex itself. In matrix form
+$\mL_u=\mD^{-1}\mA-\mI$, with $\mA$ the adjacency matrix and $\mD$ the diagonal matrix of
+valences. Applied to positions, $\mL_u\bx$ points from the vertex to the centroid of its
+one-ring. On a regular grid it is the classical five-point stencil, but on irregular meshes the
+centroid differs from the vertex even when the surface is flat, so $\mL_u\bx$ has a
+\emph{tangential} component that moves vertices along the surface (\cref{fig:flat}), and $\mL_u$
+does not converge to $\Lap_S$ under refinement.
+
+\subsection{The cotangent Laplacian by finite elements}
+
+Let $\varphi_i$ be the piecewise linear ``hat'' function equal to $1$ at vertex $i$ and $0$ at
+every other vertex, and represent $f=\sum_jf_j\varphi_j$. The Laplacian of a piecewise linear
+function is zero inside each triangle and singular on the edges, so we discretise the weak form
+instead: multiply $\Lap f=g$ by a test function $\varphi_i$, integrate and apply Green's identity,
+\begin{equation}
+\int_S\varphi_i\,g\dd A=-\int_S\inner{\grad\varphi_i}{\grad f}\dd A .
+\end{equation}
+Expanding $f$ and $g$ in the hat basis gives the linear system
+\begin{equation}
+\mM\bg=\mC\bfun,\qquad M_{ij}=\int_S\varphi_i\varphi_j\dd A,\qquad C_{ij}=-\int_S\inner{\grad\varphi_i}{\grad\varphi_j}\dd A .
+\end{equation}
+
+\paragraph{The stiffness matrix.} In a triangle with corners $i,j,k$ and area $A$, the gradient of
+$\varphi_i$ is constant, orthogonal to the opposite edge $\be_{jk}=\bx_k-\bx_j$, and of length
+$1/h_i$, where $h_i$ is the height from $i$: $\grad\varphi_i=(\bn\times\be_{jk})/(2A)$. Then
+\begin{equation}
+\int_T\inner{\grad\varphi_i}{\grad\varphi_j}\dd A=\frac{\inner{\be_{jk}}{\be_{ki}}}{4A}
+=-\frac{\norm{\be_{jk}}\norm{\be_{ki}}\cos\theta_k}{2\norm{\be_{jk}}\norm{\be_{ki}}\sin\theta_k}=-\frac12\cot\theta_k ,
+\end{equation}
+using $2A=\norm{\be_{jk}}\norm{\be_{ki}}\sin\theta_k$, where $\theta_k$ is the angle at the third
+corner. Summing over the two triangles that share the edge $ij$, with opposite angles
+$\alpha_{ij}$ and $\beta_{ij}$:
+\begin{equation}
+C_{ij}=\tfrac12(\cot\alpha_{ij}+\cot\beta_{ij})\quad(j\in\mathcal N(i)),\qquad C_{ii}=-\sum_{j\neq i}C_{ij},
+\label{eq:cotan-matrix}
+\end{equation}
+and $C_{ij}=0$ otherwise. $\mC$ is symmetric, sparse (about seven non-zeros per row), its rows sum to
+zero, and it is negative semi-definite.
+
+\paragraph{The mass matrix.} The exact (consistent) mass matrix has entries $A/6$ on the diagonal
+and $A/12$ off the diagonal per triangle. In practice it is \emph{lumped} into a diagonal matrix
+$\mM=\diag(A_1,\dots,A_n)$ with the barycentric or mixed Voronoi vertex areas of \cref{ch:diffgeo}.
+The discrete Laplace--Beltrami operator is then
+\begin{equation}
+\Lap\approx\mM^{-1}\mC,\qquad (\Lap\bfun)_i=\frac{1}{2A_i}\sum_{j\in\mathcal N(i)}(\cot\alpha_{ij}+\cot\beta_{ij})(f_j-f_i),
+\end{equation}
+which is the cotangent formula \eqref{eq:cotan} of \cref{ch:diffgeo}. Note that
+$\mM^{-1}\mC$ is not symmetric; algorithms work with the symmetric pair $(\mC,\mM)$ instead.
+
+\begin{example}{Cotangent weights}{cotw}
+Consider the edge $ij$ shared by two triangles whose angles opposite to it are $\alpha=60^\circ$
+and $\beta=90^\circ$. Then $C_{ij}=\tfrac12(\cot60^\circ+\cot90^\circ)=\tfrac12(0.577+0)=0.289$.
+If instead $\beta=120^\circ$, $\cot\beta=-0.577$ and $C_{ij}=0$: the two contributions cancel.
+For $\alpha+\beta>\pi$ the weight is negative. Since
+$\cot\alpha+\cot\beta=\sin(\alpha+\beta)/(\sin\alpha\sin\beta)$, the weight is non-negative exactly
+when $\alpha+\beta\le\pi$, the local \emph{Delaunay} condition for the edge.
+\end{example}
+
+\subsection{Comparing the discretisations}
+
+The cotangent Laplacian has \emph{linear precision}: if the mesh is planar and $f$ is a linear
+function, then $\mC\bfun=\bzero$ at interior vertices, exactly as $\Lap f=0$ in the continuous
+setting. Applied to the coordinates of a flat mesh, $\mC\bx=\bzero$, so cotangent smoothing never
+moves vertices within a plane, whereas the uniform Laplacian does (\cref{fig:flat}). It also
+converges to $\Lap_S$ under refinement of reasonable meshes and depends only on the geometry, not
+on how the mesh was triangulated. Its drawback is that weights become negative on non-Delaunay
+edges, which can break the maximum principle.
+
+\fig[0.7\textwidth]{ch05_flat_uniform.pdf}{An irregular triangulation of a planar square. Left:
+the uniform Laplacian of the vertex positions (red arrows) is far from zero; its largest interior
+norm is $0.0515$, so uniform smoothing slides vertices inside the plane. Right: the cotangent
+Laplacian vanishes at every interior vertex up to round-off ($3.6\times10^{-15}$).}{fig:flat}
+
+\Citet{Wardetzky2007} proved that on general meshes no discrete Laplacian can be symmetric,
+local, have linear precision and have non-negative weights at the same time (``no free lunch''). The
+uniform Laplacian sacrifices linear precision, the cotangent Laplacian sacrifices positivity on
+non-Delaunay meshes. Intrinsic Delaunay triangulations, and the robust Laplacian of
+\citet{Sharp2020} for non-manifold meshes and point clouds, recover positivity without moving
+vertices.
+
+\section{The spectral view}
+
+The discrete eigenproblem
+\begin{equation}
+-\mC\bphi_k=\lambda_k\mM\bphi_k,\qquad 0=\lambda_1<\lambda_2\le\lambda_3\le\cdots,\qquad
+\bphi_k\T\mM\bphi_l=\delta_{kl},
+\label{eq:geneig}
+\end{equation}
+is a generalized symmetric eigenproblem whose eigenvectors are orthonormal with respect to the
+$\mM$ inner product $\inner{\bfun}{\bg}_\mM=\bfun\T\mM\bg\approx\int_Sfg\dd A$. The first
+eigenvector is constant. On the unit sphere the eigenfunctions are the spherical harmonics, with
+eigenvalue $\ell(\ell+1)$ of multiplicity $2\ell+1$; the discrete spectrum reproduces these
+plateaus (\cref{fig:sphere-spec}). On a general shape the low eigenfunctions vary slowly along the
+main parts of the object and the higher ones oscillate with increasing frequency
+(\cref{fig:eigvec}); they are the \emph{manifold harmonics} \citep{Vallet2008,Zhang2010}.
+
+\fign{ch05_sphere_spectrum.pdf}{First eigenvalues of the cotangent Laplacian on an irregularly
+triangulated unit sphere. They group in plateaus of $2\ell+1$ values at
+$\ell(\ell+1)=0,2,6,12,20,\dots$ (dotted lines), the eigenvalues of the spherical
+harmonics.}{fig:sphere-spec}
+
+\fig{ch05_eigenvectors.png}{Eigenvectors of the cotangent Laplacian on the bunny (blue negative,
+red positive). Low frequencies follow the large-scale structure (the ears, the body); the index
+and the eigenvalue grow with the number of oscillations.}{fig:eigvec}
+
+Any function, and in particular each coordinate of the vertex positions, can be expanded in this
+basis. The coefficients are $\bc=\mPhi\T\mM\bx$ (one row per eigenvector, one column per
+coordinate) and the \emph{spectral low-pass filter} keeps the first $m$ terms,
+\begin{equation}
+\tilde\bx=\sum_{k=1}^{m}\bphi_k\bphi_k\T\mM\bx=\mPhi_m\mPhi_m\T\mM\bx .
+\end{equation}
+\Cref{fig:lowpass} shows reconstructions of a noisy bunny. The coefficients of the clean shape
+decay quickly with $\lambda$ while the noise spreads evenly over all frequencies, so truncation
+separates them. Spectral filtering is the cleanest form of smoothing, but computing many
+eigenvectors is expensive: the first few hundred are obtained with shift-invert Lanczos iterations
+(\texttt{scipy.sparse.linalg.eigsh} with a small negative shift), each requiring a sparse
+factorisation; the full spectrum needs dense $O(n^3)$ methods and is only practical for small
+meshes. Diffusion flows achieve a similar filtering with a few sparse solves.
+
+\fig{ch05_lowpass.png}{Spectral low-pass filtering of a noisy bunny with the first $m$
+eigenvectors. With $m=10$ only the coarse shape survives, $m=150$ already shows the ears and
+legs, and $m=600$ starts to bring back noise. Right: norm of the spectral coefficients of the noisy
+and clean shapes against $\lambda_k$: the signal decays, the noise is flat.}{fig:lowpass}
+
+\section{Diffusion flow}
+
+Smoothing a mesh by diffusion means evolving the vertex positions with the heat equation
+\begin{equation}
+\frac{\partial\bx}{\partial t}=\Lap\bx ,
+\end{equation}
+which, by \eqref{eq:mean-curvature-normal}, moves each point against the normal with speed $2H$.
+In the eigenbasis the exact solution for a fixed operator is $\bc_k(t)=e^{-\lambda_kt}\bc_k(0)$:
+diffusion for time $t$ is a low-pass filter with transfer function $e^{-t\lambda}$. Two time
+discretisations are used.
+
+\subsection{Explicit Euler}
+
+The explicit (forward Euler) step with step size $h$ is
+\begin{equation}
+\bx^{(k+1)}=\bx^{(k)}+h\,\Lap\bx^{(k)} .
+\end{equation}
+With the uniform Laplacian and $h=\lambda\in(0,1)$ this is classical \emph{Laplacian smoothing}:
+every vertex moves a fraction $\lambda$ of the way towards the centroid of its neighbours. In the
+eigenbasis each step multiplies mode $k$ by $(1-h\lambda_k)$, so the iteration is stable only if
+$\abs{1-h\lambda_k}\le1$ for every $k$:
+\begin{equation}
+h\le\frac{2}{\lambda_{\max}} .
+\end{equation}
+For the uniform Laplacian $\lambda_{\max}\le2$, so $h<1$. For the cotangent Laplacian $\lambda_{\max}$
+grows like $1/\bar\ell^2$, where $\bar\ell$ is the edge length, and a single small or sliver triangle
+can make it huge, so explicit cotangent smoothing needs tiny steps. Close to the limit the highest
+modes are not damped but flip sign at every step, and beyond it they grow exponentially
+(\cref{fig:transfer}).
+
+\subsection{Implicit Euler}
+
+The implicit (backward Euler) step evaluates the Laplacian at the new positions,
+$\bx^{(k+1)}=\bx^{(k)}+h\,\mM^{-1}\mC\bx^{(k+1)}$, that is
+\begin{equation}
+(\mM-h\mC)\,\bx^{(k+1)}=\mM\bx^{(k)} .
+\label{eq:implicit}
+\end{equation}
+The matrix $\mM-h\mC$ is sparse, symmetric and positive definite, so the system is solved with a
+sparse Cholesky factorisation (reused for all three coordinates and for all steps if the operator is
+kept fixed) or with conjugate gradients. Each step multiplies mode $k$ by $1/(1+h\lambda_k)$, which
+is in $(0,1]$ for every $h>0$: the scheme is \emph{unconditionally stable} \citep{Desbrun1999}. A
+single implicit step of size $t$ already approximates the ideal filter $e^{-t\lambda}$, and $N$
+steps of size $t/N$ approach it as $(1+t\lambda/N)^{-N}\to e^{-t\lambda}$
+(\cref{fig:transfer}).
+
+\fig{ch05_transfer.pdf}{Transfer functions of smoothing schemes. Left: for total time $t$, the
+exact filter $e^{-t\lambda}$, one implicit step $1/(1+t\lambda)$, ten implicit steps, and an
+explicit scheme near its stability limit, whose transfer oscillates in sign for large $\lambda$.
+Centre: after many explicit steps, $h=1.9/\lambda_{\max}$ still damps all modes, while
+$h=2.1/\lambda_{\max}$ amplifies the highest ones without bound. Right: ten steps of Laplacian
+smoothing with $\lambda=0.33$ against Taubin's $\lambda|\mu$ filter, which passes the lowest
+frequencies almost unchanged.}{fig:transfer}
+
+\paragraph{Linear versus curvature flow.} If $\mC$ and $\mM$ are computed once on the input mesh,
+the flow is linear and every step reuses the same factorisation. Recomputing them at every step
+gives a discretisation of the true \emph{mean curvature flow}, which is non-linear and more
+faithful to the geometry but more expensive.
+
+\section{Shrinkage, drift and their remedies}
+
+Diffusion damps every non-constant mode, including the low frequencies that carry the shape. In
+the limit $t\to\infty$ every coordinate converges to its mean and the mesh collapses to a point.
+Under mean curvature flow a sphere of radius $r_0$ shrinks as $r(t)=\sqrt{r_0^2-4t}$ and
+disappears at $t=r_0^2/4$. Three remedies are standard.
+
+\paragraph{Volume rescaling.} The enclosed volume of a closed oriented mesh follows from the
+divergence theorem,
+\begin{equation}
+\vol=\frac16\sum_{f=(a,b,c)}\bx_a\cdot(\bx_b\times\bx_c),
+\end{equation}
+and after each step the mesh is scaled about its centroid by $(\vol_0/\vol)^{1/3}$ to restore the
+initial volume \citep{Desbrun1999}.
+
+\paragraph{Taubin's $\lambda|\mu$ smoothing.} \citet{Taubin1995} alternates a shrinking step with
+$\lambda>0$ and an inflating step with $\mu<-\lambda<0$:
+\begin{equation}
+\bx\leftarrow(\mI+\lambda\mL_u)\bx,\qquad\bx\leftarrow(\mI+\mu\mL_u)\bx .
+\end{equation}
+For an eigenvalue $\kappa$ of $-\mL_u$ the transfer of one pair of steps is
+$f(\kappa)=(1-\lambda\kappa)(1-\mu\kappa)$. It equals one at $\kappa=0$ and at the
+\emph{pass-band frequency} $\kappa_{PB}=1/\lambda+1/\mu>0$, is slightly larger than one in between
+and smaller than one above. With the usual values $\lambda=0.33$, $\mu=-0.34$, $\kappa_{PB}\approx0.09$:
+low frequencies are preserved and high frequencies removed, so the filter smooths without shrinking
+(\cref{fig:transfer}, right).
+
+\paragraph{Using the right operator.} The uniform Laplacian also has a tangential component that
+drags vertices towards densely sampled regions. \Cref{fig:irregular} smooths a sphere whose
+triangulation is denser on one side until its area halves: with the uniform operator
+the centre moves by $0.232$ and the radius varies by $5.7\%$ over the surface, while the cotangent
+operator keeps the centre and the spherical shape ($0.1\%$ deviation).
+
+\fig[0.7\textwidth]{ch05_irregular_sphere.png}{Smoothing an irregularly sampled unit sphere until
+its area halves. The uniform Laplacian shifts the centroid by $0.232$ and deforms the sphere
+($5.7\%$ radial deviation); the cotangent Laplacian shrinks it uniformly ($0.1\%$
+deviation).}{fig:irregular}
+
+\section{Putting it together}
+
+\Cref{fig:implicit} shows implicit cotangent smoothing of a noisy bunny with growing step sizes,
+measured in units of $\bar\ell^2$ (the squared mean edge length, the natural time scale of
+diffusion over one edge). Small steps remove the noise; large steps remove the ears, the legs and
+finally the bunny itself, which degenerates into a thin, elongated blob before collapsing. In
+practice smoothing must be stopped: \cref{fig:errcurves} measures the distance to the clean
+surface as smoothing proceeds. The error first drops below the noise level, reaches a minimum and
+then grows again as shrinkage dominates; volume rescaling lowers the minimum and widens the
+useful range of $t$.
+
+\fig{ch05_implicit.png}{Implicit cotangent smoothing \eqref{eq:implicit} of a noisy bunny with one
+step of size $h=1,10,100,1000\,\bar\ell^2$. The last panel shows the result for $h=1000\bar\ell^2$
+rescaled to the original size: the shape has collapsed towards a curve.}{fig:implicit}
+
+\fig[0.85\textwidth]{ch05_error_curves.pdf}{Median distance to the clean surface while smoothing
+a noisy test surface (dotted line: noise level). Left: explicit uniform smoothing with $h=0.5$
+reaches its best result after a few iterations and then shrinks the shape. Right: implicit
+cotangent smoothing with small steps, the same with volume rescaling after every step, and single
+implicit steps of size $t$.}{fig:errcurves}
+
+A practical recipe:
+\begin{enumerate}
+  \item build $\mC$ and $\mM$ (cotangent weights, mixed or barycentric areas);
+  \item choose a total time $t$ of a few $\bar\ell^2$ for noise removal, larger for fairing;
+  \item solve $(\mM-t\mC)\bx'=\mM\bx$ once, or a few times with smaller steps;
+  \item rescale to the original volume, or use Taubin's filter when only the uniform operator is
+  available;
+  \item keep features: smoothing blurs sharp edges, which require anisotropic or feature-aware
+  variants (for example weights that decrease across large normal changes).
+\end{enumerate}
+
+\begin{notebook}{Tema04\_LaplaceBeltrami\_Suavizado.ipynb}
+Implements \texttt{uniform\_laplacian}, \texttt{cotan\_matrix} (finite elements),
+\texttt{mass\_matrix} and \texttt{mean\_curvature\_normal}; computes the spectral basis with
+\texttt{laplacian\_eigs} and a \texttt{spectral\_lowpass} filter; implements
+\texttt{smooth\_explicit} with its stability limit and \texttt{smooth\_implicit}; and studies
+shrinkage with \texttt{signed\_volume} and \texttt{rescale\_volume}.
+\end{notebook}
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item The uniform Laplacian depends only on connectivity and drifts tangentially; the cotangent
+  Laplacian $\mM^{-1}\mC$ comes from linear finite elements, has linear precision and converges.
+  \item Laplacian eigenvectors are a Fourier basis on the surface; smoothing is low-pass filtering.
+  \item Explicit diffusion is stable only for $h\le2/\lambda_{\max}$; implicit diffusion,
+  $(\mM-h\mC)\bx'=\mM\bx$, is unconditionally stable and approximates $e^{-t\lambda}$.
+  \item Diffusion shrinks shapes; volume rescaling and Taubin's $\lambda|\mu$ filter compensate it.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+Show that the rows of $\mC$ sum to zero and that $\bfun\T\mC\bfun=-\sum_{ij\in E}C_{ij}(f_i-f_j)^2$.
+Conclude that $\mC$ is negative semi-definite when all weights are non-negative.
+\end{exercise}
+\begin{exercise}
+For the uniform Laplacian prove that the eigenvalues of $-\mL_u$ lie in $[0,2]$. Hint: $\mL_u$ is
+similar to the symmetric matrix $\mD^{-1/2}\mA\mD^{-1/2}-\mI$.
+\end{exercise}
+\begin{exercise}
+Find the pass-band frequency and the maximum gain of Taubin's filter for $\lambda=0.5$,
+$\mu=-0.53$.
+\end{exercise}
+\begin{exercise}
+Under mean curvature flow a sphere satisfies $\dot r=-2/r$. Derive $r(t)=\sqrt{r_0^2-4t}$ and the
+collapse time.
+\end{exercise}

@@ -1,0 +1,247 @@
+\chapter{3D Acquisition}\label{ch:acq}
+
+Every pipeline in this course starts with measurements of a real object. This chapter reviews how
+3D scanners work, what their measurements look like, and why the raw output (several noisy,
+partial point clouds in different coordinate systems) needs the registration and reconstruction
+steps of the next chapters. It follows the first part of Tema 5; the taxonomy follows
+\citet{Hartley2004} for stereo and the survey of structured light by \citet{Geng2011}.
+
+\section{From images to 3D data}
+
+A digital camera samples the light that reaches a sensor, producing a 2D array of intensities. A
+\emph{range} sensor produces, for each pixel, a distance along the corresponding viewing ray, a
+\emph{range image}. Knowing the intrinsic calibration of the sensor, each pixel $(u,v)$ with depth
+$Z$ back-projects to a 3D point
+\begin{equation}
+\bp=Z\,\mK^{-1}\begin{pmatrix}u\\v\\1\end{pmatrix},\qquad
+\mK=\begin{pmatrix}f_x&0&c_x\\0&f_y&c_y\\0&0&1\end{pmatrix},
+\end{equation}
+so a range image is an organised point cloud in the coordinate system of the sensor. Points with
+an estimated normal are sometimes called \emph{surfels}. Point clouds are what every capture device
+produces, which is the first reason to study them; the second is that they are local and simple.
+Their limitations are the absence of connectivity, of topology and of a smooth rendering, together
+with noise.
+
+\section{A taxonomy of scanners}
+
+\begin{itemize}
+  \item \textbf{Contact} devices (coordinate measuring machines, articulated arms) touch the object
+  with a probe: very accurate, slow, and unsuitable for fragile objects.
+  \item \textbf{Transmissive} devices (CT, MRI) measure the interior and produce volumes.
+  \item \textbf{Optical, active} devices emit light and observe its return: time-of-flight and
+  phase-based range scanners, laser triangulation, structured light, active stereo.
+  \item \textbf{Optical, passive} methods use only ambient light: stereo, multi-view stereo and
+  photogrammetry, shape from shading.
+\end{itemize}
+The course focuses on single-view optical scanners, which measure one side of the object at a time,
+grouped in three families: range scanners, triangulation scanners and stereo.
+
+\section{Time-of-flight scanners}
+
+A pulsed time-of-flight scanner emits a short laser pulse, detects its reflection and measures the
+round-trip time $T$. Since light travels to the surface and back,
+\begin{equation}
+D=\frac{c\,T}{2},\qquad \Delta D=\frac{c\,\Delta T}{2},
+\end{equation}
+where $c\approx3\times10^8$\,m/s. The depth resolution is limited by the timing resolution: a
+1\,GHz clock ($\Delta T=1$\,ns) gives $\Delta D=15$\,cm, and millimetre resolution requires
+picosecond timing. Pulsed scanners therefore suit long ranges (buildings, terrain, autonomous
+vehicles) where centimetre accuracy suffices. A LiDAR sweeps the beam with rotating mirrors or a
+spinning head to cover the scene.
+
+\section{Phase-based scanners}
+
+A continuous-wave scanner emits light whose intensity is modulated at frequency $f$,
+$s(t)=a\cos(2\pi ft)$, and receives an attenuated, delayed copy plus ambient light,
+$r(t)=A\cos(2\pi f(t-\tau))+B$, with $\tau=2D/c$. The delay appears as a phase shift
+$\varphi=2\pi f\tau$, measured with the cross-correlation
+\begin{equation}
+C(x)=\lim_{T\to\infty}\frac1T\int_{-T/2}^{T/2}s(t)\,r(t-x)\dd t=\frac{aA}{2}\cos\bigl(2\pi f(x+\tau)\bigr)=\frac{aA}{2}\cos(2\pi fx+\varphi) .
+\end{equation}
+Sampling $C$ at four offsets $x_k=k/(4f)$, $k=0,\dots,3$ (the ``four-bucket'' method) gives
+$C_0=K\cos\varphi$, $C_1=-K\sin\varphi$, $C_2=-K\cos\varphi$ and $C_3=K\sin\varphi$ with
+$K=aA/2$, so
+\begin{equation}
+\varphi=\operatorname{atan2}(C_3-C_1,\;C_0-C_2),\qquad A\propto\sqrt{(C_3-C_1)^2+(C_0-C_2)^2},\qquad
+D=\frac{c\,\varphi}{4\pi f} .
+\end{equation}
+The ambient term $B$ cancels in the differences, and the amplitude measures the confidence of the
+pixel. Because the phase is only known modulo $2\pi$, distances are ambiguous beyond
+$D_{\max}=c/(2f)$ (7.5\,m for $f=20$\,MHz); using two modulation frequencies resolves the
+ambiguity. Phase-based scanners are more accurate than pulsed ones at short and medium range, and
+time-of-flight cameras (such as the second Kinect) apply the same principle to every pixel of a
+sensor. In general, range scanners provide limited precision and their output requires substantial
+post-processing.
+
+\fig[0.85\textwidth]{ch06_phase.pdf}{Phase-based ranging. Left: emitted and received signals; the
+received one is attenuated, offset by ambient light and delayed by $\tau=2D/c$. Right: the
+cross-correlation is a sinusoid whose phase $\varphi=2\pi f\tau$ is recovered from four samples
+(the four buckets).}{fig:phase}
+
+\section{Triangulation scanners}
+
+A triangulation scanner adds a camera to a light emitter at a known distance $b$, the
+\emph{baseline}. The emitter projects a laser dot or line in a known direction, and the camera
+observes where it lands on the object. The emitter, the camera and the illuminated point form a
+triangle with one known side ($b$) and two known angles: $\alpha$ at the emitter, from the
+projection direction, and $\beta$ at the camera, from the pixel where the dot appears. By the law
+of sines,
+\begin{equation}
+d=\frac{b\sin\alpha}{\sin(\alpha+\beta)},\qquad Z=d\sin\beta=\frac{b\sin\alpha\sin\beta}{\sin(\alpha+\beta)},
+\end{equation}
+where $d$ is the distance from the camera to the point and $Z$ its distance to the baseline
+(\cref{fig:triangulation}). Equivalently, the shift of the observed dot with respect to its
+position on a reference plane encodes the depth. Well-calibrated laser triangulation reaches
+extreme precision (tens of micrometres), which is why it was used for the Digital Michelangelo
+project \citep{Levoy2000}, but sweeping a single line over the object is slow and the equipment is
+expensive. Depth precision degrades with distance, and the occlusions seen by either the emitter or
+the camera create holes.
+
+\begin{figure}[tbp]
+\centering
+\begin{tikzpicture}[scale=1.0, every node/.style={font=\small}]
+  \coordinate (L) at (0,0); \coordinate (Cm) at (4,0); \coordinate (P) at (1.6,3.0);
+  \draw[thick] (L) -- node[below] {baseline $b$} (Cm);
+  \draw[BrickRed, thick, -{Stealth}] (L) -- (P);
+  \draw[MidnightBlue, thick] (P) -- (Cm);
+  \draw[dashed, gray] (P) -- (1.6,0) node[below, black] {};
+  \node[left] at ($(L)!0.5!(P)$) {laser};
+  \node[right] at ($(Cm)!0.5!(P)$) {$d$};
+  \node at (1.85,1.4) {$Z$};
+  \fill (P) circle (2pt) node[above] {$\bp$};
+  \draw (0.55,0) arc (0:62:0.55); \node at (0.75,0.32) {$\alpha$};
+  \draw (3.45,0) arc (180:118:0.55); \node at (3.25,0.32) {$\beta$};
+  \draw[fill=black!10] (L) ++(-0.25,-0.2) rectangle ++(0.5,0.4);
+  \draw[fill=MidnightBlue!15] (Cm) ++(-0.3,-0.22) rectangle ++(0.6,0.44);
+  \node[below=5pt] at (Cm) {camera};
+  % stereo sketch
+  \begin{scope}[xshift=6.6cm]
+    \coordinate (O1) at (0,0); \coordinate (O2) at (3,0); \coordinate (Q) at (1.2,3.0);
+    \draw[thick] (O1) -- node[below] {$B$} (O2);
+    \draw (-0.6,0.6) -- (0.6,0.6); \draw (2.4,0.6) -- (3.6,0.6);
+    \node[left] at (-0.6,0.6) {image planes};
+    \draw[MidnightBlue] (O1) -- (Q); \draw[MidnightBlue] (O2) -- (Q);
+    \fill (Q) circle (2pt) node[above] {$\bp$};
+    \fill[BrickRed] (0.24,0.6) circle (1.5pt); \fill[BrickRed] (2.64,0.6) circle (1.5pt);
+    \draw[<->] (0,0.85) -- node[above, font=\scriptsize] {$x_l$} (0.24,0.85);
+    \draw[<->] (2.64,0.85) -- node[above, font=\scriptsize] {$x_r$} (3,0.85);
+    \draw[<->, gray] (3.9,0) -- node[right] {$f$} (3.9,0.6);
+    \draw[<->, gray] (4.5,0) -- node[right] {$Z$} (4.5,3.0);
+    \node at (1.5,-0.75) {$d=x_l-x_r=fB/Z$};
+  \end{scope}
+\end{tikzpicture}
+\caption{Left: laser triangulation; the depth follows from the baseline and the two angles. Right:
+rectified stereo; a point at depth $Z$ appears in the two images with disparity $d=fB/Z$.}
+\label{fig:triangulation}
+\end{figure}
+
+\section{Structured light}
+
+Structured-light scanners replace the laser by a projector, which illuminates the whole scene with
+patterns. The geometry is that of triangulation, with the projector acting as an inverse camera;
+the challenge is to identify, for each camera pixel, which projector column (stripe) illuminated it.
+Projecting a single pattern of $N$ stripes is ambiguous, but a sequence of binary patterns gives
+each stripe a code: with $n$ patterns, $2^n$ stripes can be distinguished, so
+$\lceil\log_2N\rceil$ projections suffice for $N$ stripes. The natural binary code has the defect
+that many bits change between neighbouring stripes, so a decoding error at a stripe boundary can
+produce a large error. The reflected binary \emph{Gray code} changes exactly one bit between
+consecutive stripes, so boundary errors cost at most one stripe \citep{Inokuchi1984}; the Gray
+code of $k$ is $k\oplus(k\gg1)$ (\cref{fig:graycode}). Sub-stripe accuracy is obtained by
+additionally projecting shifted sinusoids and measuring their phase per pixel, exactly as in the
+phase-based scanner.
+
+\fig[0.85\textwidth]{ch06_graycode.pdf}{Binary and Gray code patterns for $2^4=16$ stripes, one row
+per projected pattern. In the Gray code consecutive columns differ in exactly one bit, so an error
+at a stripe boundary displaces the decoded stripe by at most one.}{fig:graycode}
+
+Structured light is fast and cheap (a projector and a camera), and acquires a dense range image
+in a fraction of a second. It needs controlled conditions, since strong ambient light washes out
+the patterns, and a careful calibration of the camera--projector pair. The first Microsoft
+Kinect (2009--2010) made the idea a consumer product: an infrared projector casts a fixed
+pseudo-random dot pattern that is matched in a single shot against a stored reference, producing
+$640\times480$ depth images (about $300\,000$ points) at 30 frames per second, with precision from
+about 1\,mm at 0.5\,m to 4\,cm at 2\,m.
+
+\section{Stereo}
+
+Passive stereo uses two calibrated cameras. After \emph{rectification}, which makes the image
+rows correspond (epipolar lines horizontal), a point at depth $Z$ appears at horizontal
+coordinates $x_l$ and $x_r$ in the two images, and similar triangles give the \emph{disparity}
+\begin{equation}
+d=x_l-x_r=\frac{fB}{Z},
+\end{equation}
+where $f$ is the focal length in pixels and $B$ the baseline (\cref{fig:triangulation}). Inverting,
+$Z=fB/d$, and differentiating,
+\begin{equation}
+\Delta Z\approx\frac{Z^2}{fB}\,\Delta d :
+\end{equation}
+the depth error grows quadratically with distance and decreases with the baseline and the focal
+length (\cref{fig:stereo}). The hard part of stereo is not the geometry but the \emph{correspondence
+problem}: finding, for each pixel of the left image, the pixel of the right image that sees the
+same point. It fails on textureless or repetitive regions, which is why \emph{active stereo}
+projects a random texture to create matchable features. With many images from unknown positions,
+structure from motion recovers the cameras and multi-view stereo the dense geometry
+(photogrammetry).
+
+\fig[0.85\textwidth]{ch06_stereo.pdf}{Stereo geometry for a Kinect-like rig ($f=580$\,px,
+$B=7.5$\,cm). Left: disparity against depth, $d=fB/Z$. Right: depth error for a disparity error of
+$1/8$ pixel; it grows as $Z^2$, from about 3\,mm at 1\,m to 46\,mm at 4\,m.}{fig:stereo}
+
+\section{Modern devices}
+
+Today's sensors combine these principles: solid-state and rotating LiDARs (pulsed time of flight)
+for robotics and mapping, time-of-flight cameras and LiDAR in mobile phones, structured light for
+face authentication, active stereo cameras for robotics, and photogrammetry from ordinary photos.
+Learning-based monocular depth estimation complements them when only one image is available.
+
+\section{What a scan looks like}
+
+All of these devices deliver data with the same defects, which the rest of the course must handle:
+\begin{itemize}
+  \item \textbf{Partiality}: a single view sees only one side of the object; a complete model
+  requires several scans.
+  \item \textbf{Different coordinate systems}: each scan is expressed in the frame of the sensor at
+  the moment of acquisition (\cref{fig:scans}).
+  \item \textbf{Noise}: depth errors grow with distance and with the angle between the viewing ray
+  and the surface.
+  \item \textbf{Outliers}: spurious points at depth discontinuities (mixed pixels), reflections and
+  dust.
+  \item \textbf{Holes}: occlusions, and dark, transparent or specular materials that return no
+  signal.
+\end{itemize}
+The processing pipeline that turns scans into a model is therefore: acquire the scans, align them
+(registration, \cref{ch:icp,ch:global}), remove noise and outliers, estimate normals, and reconstruct
+a surface (\cref{ch:recon}).
+
+\fig[0.85\textwidth]{ch06_scans.png}{Two simulated range scans of the bunny from different
+viewpoints; each covers only part of the surface. Overlaid in the world frame in which they were
+simulated, they complement each other. A real scanner delivers each scan in its own sensor frame,
+and registration must recover the rigid transformations that bring them into a common
+frame.}{fig:scans}
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item Pulsed time of flight: $D=cT/2$; long range, resolution limited by timing (1\,ns gives
+  15\,cm).
+  \item Phase-based ranging: $D=c\varphi/(4\pi f)$, recovered with four correlation samples,
+  ambiguous beyond $c/(2f)$.
+  \item Triangulation and structured light: depth from a known baseline and two angles; Gray codes
+  identify $N$ stripes with $\lceil\log_2N\rceil$ patterns.
+  \item Stereo: $d=fB/Z$, error growing as $Z^2$; the difficulty is finding correspondences.
+  \item Scans are partial, noisy, have outliers and holes, and live in different coordinate systems.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+A phase-based scanner uses $f=10$\,MHz. What is its unambiguous range? If the phase is measured
+with an error of $0.01$\,rad, what is the distance error?
+\end{exercise}
+\begin{exercise}
+Write the Gray code of the integers $0,\dots,7$ and check that consecutive codes differ in one bit.
+How do you decode a Gray code back to the integer?
+\end{exercise}
+\begin{exercise}
+A stereo rig has $f=800$\,px and $B=0.1$\,m, and matches with $0.25$\,px accuracy. Compute the
+depth error at $1$\,m and at $5$\,m.
+\end{exercise}

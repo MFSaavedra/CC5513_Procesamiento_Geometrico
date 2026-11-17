@@ -415,7 +415,8 @@ def lloyd_figure():
         ax.set_xticks([]); ax.set_yticks([])
         ax.set_title(f"Lloyd iteration {it}", fontsize=8)
     axs[3].plot(np.arange(len(E)), 1e3 * np.array(E), "C0.-", ms=3)
-    axs[3].set_xlabel("iteration"); axs[3].set_ylabel(r"CVT energy ($\times 10^{-3}$)")
+    axs[3].set_xlabel("iteration"); axs[3].set_ylabel(r"$E_{\mathrm{CVT}}\ (\times10^{-3})$", labelpad=1)
+    axs[3].yaxis.tick_right(); axs[3].yaxis.set_label_position("right")
     axs[3].grid(alpha=0.3)
     gp.savefig(fig, "ch12_lloyd.pdf")
 
@@ -648,20 +649,20 @@ def deformation_figure():
                   view=(25, -60) if X is V else (6, 0), smooth=X is not V, color=(0.8, 0.82, 0.86))
         ax.set_title(t, fontsize=8)
     gp.savefig(fig, "ch13_laplacian_arap.png")
-    # soft constraint weights on a horse leg
+    # soft constraint weights: lift the tail tip of the cat while the front half is fixed
     Vh, Fh = gp.model("cat0", faces=12000)
-    z = Vh[:, 2]
-    tail = Vh[:, 0] - 0.25 * Vh[:, 2]
-    handle = np.nonzero(tail > np.percentile(tail, 99.4))[0]
-    fixed = np.nonzero(Vh[:, 0] < np.percentile(Vh[:, 0], 55))[0]
-    target = Vh[handle] + np.array([0.0, 0.0, 0.35])
+    tip = int(np.argmax(np.linalg.norm(Vh - Vh.mean(0), axis=1)))      # tail tip
+    d_tip = np.linalg.norm(Vh - Vh[tip], axis=1)
+    handle = np.nonzero(d_tip < 0.03)[0]
+    fixed = np.nonzero(d_tip > np.percentile(d_tip, 50))[0]            # half farthest from the tail
+    target = Vh[handle] + np.array([0.0, 0.0, 0.2])
     fig, axs = plt.subplots(1, 4, figsize=(gp.TEXTWIDTH, 1.6))
     gp.render(axs[0], Vh, Fh, view=(10, -80), title="input")
     for ax, w in zip(axs[1:], [0.003, 0.03, 10.0]):
         X = laplacian_edit(Vh, Fh, fixed, handle, target, w=w)
         err = np.linalg.norm(X[handle] - target, axis=1).mean()
         print("soft weight", w, "handle error", err)
-        gp.render(ax, X, Fh, view=(10, -80), title=f"$w={w:g}$")
+        gp.render(ax, X, Fh, view=(10, -80), title=f"$w={w:g}$: error {err:.3f}")
     for a in axs:
         a.title.set_fontsize(7.5)
     gp.savefig(fig, "ch13_soft_weights.png")

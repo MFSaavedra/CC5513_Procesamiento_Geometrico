@@ -53,7 +53,8 @@ course. In \cref{ch:diffgeo,ch:smooth,ch:deform} we use the analyst's Laplacian
 $\Lap f=\Div\grad f$, which is negative semi-definite; its discretisation is
 $\Lap\approx\mM^{-1}\mC$, where $\mC$ is the cotangent \emph{stiffness} matrix (negative
 semi-definite, rows summing to zero) and $\mM$ the lumped mass matrix. With this sign,
-$\Lap\bx=2H\bn$ on a surface with outward normal and mean curvature $H>0$ on spheres.
+$\Lap\bx=-2H\bn$, where $\bn$ is the outward normal and $H>0$ on a sphere, so the diffusion flow
+$\partial_t\bx=\Lap\bx$ moves convex regions inwards.
 In \cref{ch:spectral,ch:fmaps} we follow the spectral geometry literature and use the positive
 operator $L=-\Div\grad$, discretised by $\mL=-\mC$; its eigenproblem is
 $\mL\bphi=\lambda\mM\bphi$ with $0=\lambda_1\le\lambda_2\le\cdots$ and eigenvectors normalised

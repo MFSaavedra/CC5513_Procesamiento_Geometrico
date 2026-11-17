@@ -1,0 +1,224 @@
+\chapter{Local Registration: Iterative Closest Point}\label{ch:icp}
+
+Registration finds the transformation that aligns two shapes with partially overlapping geometry.
+It is needed to merge the scans of an object (\cref{ch:acq}), to compare a manufactured part with
+its CAD model and find defects, to align medical images of the same patient, to track objects, and
+to build statistical shape models from collections. This chapter studies the \emph{local}
+problem: the two shapes are already roughly aligned and we look for the optimal rigid motion. The
+standard algorithm is the iterative closest point (ICP) method of \citet{Besl1992} and
+\citet{Chen1992}, one of the most widely used algorithms in computer graphics and in industry.
+\Cref{ch:global} removes the assumption of a good initial alignment.
+
+\section{Problem statement}
+
+Let $X=\{\bx_i\}$ (the \emph{source}) and $Y=\{\by_j\}$ (the \emph{target}) be two point clouds.
+We look for a rotation $\mR\in SO(3)$ and a translation $\bt\in\R^3$ such that the transformed
+source lies on the target. A good alignment is one in which corresponding points are close after
+the transformation. If the correspondences $\bx_i\leftrightarrow\by_i$ were known, the problem
+would be the least-squares fit
+\begin{equation}
+\min_{\mR,\bt}\ \sum_{i=1}^N\norm{\mR\bx_i+\bt-\by_i}^2 ,
+\label{eq:procrustes}
+\end{equation}
+which has a closed-form solution. The difficulty is that we know neither the correspondences nor
+the transformation, and each would be easy to find given the other.
+
+\section{The ICP algorithm}
+
+ICP alternates between the two easy subproblems (\cref{alg:icp}): given the current
+transformation, match each source point to its closest target point; given the matches, solve
+\eqref{eq:procrustes}.
+
+\begin{algorithm}[tbp]
+\caption{Iterative closest point (point-to-point).}\label{alg:icp}
+\Input{source $X$, target $Y$, initial $(\mR,\bt)$, tolerance $\varepsilon$}
+\Output{rigid transformation $(\mR,\bt)$}
+build a kd-tree on $Y$\;
+\Repeat{the decrease of $E$ is below $\varepsilon$ or a maximum number of iterations}{
+  \ForEach{$\bx_i\in X$}{$\by_{c(i)}\gets$ nearest neighbour of $\mR\bx_i+\bt$ in $Y$\;}
+  reject pairs with distance above a threshold (optional)\;
+  $(\mR,\bt)\gets\argmin\sum_i\norm{\mR\bx_i+\bt-\by_{c(i)}}^2$ via \eqref{eq:kabsch}\;
+  $E\gets\frac1N\sum_i\norm{\mR\bx_i+\bt-\by_{c(i)}}^2$\;
+}
+\end{algorithm}
+
+\subsection{Closest points}
+
+The closest point of $\bx$ in $Y$, $\argmin_{\by\in Y}\norm{\by-\bx}$, is found by brute force in
+$O(M)$ for a target of $M$ points, so matching $N$ source points costs $O(NM)$ per iteration.
+Geometrically, $Y$ partitions space into Voronoi cells and the query asks which cell contains
+$\bx$. A kd-tree on $Y$ (\cref{ch:repr}) answers it in $O(\log M)$ expected time, giving
+$O(N\log M)$ per iteration; approximate nearest neighbours are faster still and accurate enough.
+
+\subsection{The optimal rigid transformation}
+
+\begin{theorem}[Kabsch, Arun, Umeyama]
+Let $\mu_x=\frac1N\sum_i\bx_i$, $\mu_y=\frac1N\sum_i\by_i$ and
+$\mC=\sum_i(\by_i-\mu_y)(\bx_i-\mu_x)\T$ with singular value decomposition
+$\mC=\mU\mSigma\mV\T$. The minimiser of \eqref{eq:procrustes} is
+\begin{equation}
+\mR=\mU\,\diag\bigl(1,1,\det(\mU\mV\T)\bigr)\,\mV\T,\qquad \bt=\mu_y-\mR\mu_x .
+\label{eq:kabsch}
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+\emph{Translation.} For fixed $\mR$, setting the derivative with respect to $\bt$ to zero gives
+$\sum_i2(\mR\bx_i+\bt-\by_i)=\bzero$, hence $\bt=\mu_y-\mR\mu_x$. Substituting, and writing
+$\bx_i'=\bx_i-\mu_x$, $\by_i'=\by_i-\mu_y$, the problem reduces to
+$\min_\mR\sum_i\norm{\mR\bx'_i-\by'_i}^2$.
+
+\emph{Expanding the error.} Since $\mR\T\mR=\mI$,
+$\norm{\mR\bx'_i-\by'_i}^2={\bx'_i}\T\bx'_i-2{\by'_i}\T\mR\bx'_i+{\by'_i}\T\by'_i$. Only the middle term
+depends on $\mR$, so we must maximise $\sum_i{\by'_i}\T\mR\bx'_i$.
+
+\emph{The covariance matrix.} Each term is a scalar, equal to its own trace, and with
+$\tr(\mA\mB)=\tr(\mB\mA)$: $\sum_i{\by'_i}\T\mR\bx_i'=\tr\bigl(\mR\sum_i\bx'_i{\by'_i}\T\bigr)=\tr(\mR\mC\T)$.
+
+\emph{Maximising the trace.} With $\mC=\mU\mSigma\mV\T$,
+$\tr(\mR\mC\T)=\tr(\mR\mV\mSigma\mU\T)=\tr(\mSigma\,\mU\T\mR\mV)$. The matrix
+$\mathbf N=\mU\T\mR\mV$ is orthogonal, so its entries satisfy $\abs{N_{kk}}\le1$ and
+$\tr(\mSigma\mathbf N)=\sum_k\sigma_kN_{kk}\le\sum_k\sigma_k$. The bound is attained for
+$\mathbf N=\mI$, that is $\mR=\mU\mV\T$.
+
+\emph{Avoiding reflections.} If $\det(\mU\mV\T)=-1$, then $\mU\mV\T$ is a reflection. Among
+orthogonal $\mathbf N$ with $\det(\mU\mathbf N\mV\T)=+1$ the maximum of $\tr(\mSigma\mathbf N)$ is
+$\sigma_1+\sigma_2-\sigma_3$, attained at $\mathbf N=\diag(1,1,-1)$, which gives
+\eqref{eq:kabsch}.
+\end{proof}
+
+\begin{example}{A planar triangle}{kabsch}
+Let $X=\{(0,0,0),(1,0,0),(0,1,0)\}$ and let $Y$ be $X$ rotated by $90^\circ$ about $z$ and
+translated by $(1,2,0)$: $Y=\{(1,2,0),(1,3,0),(0,2,0)\}$. Then $\mu_x=(\tfrac13,\tfrac13,0)$,
+$\mu_y=(\tfrac23,\tfrac73,0)$ and
+\[
+\mC=\frac13\begin{pmatrix}1&-2&0\\2&-1&0\\0&0&0\end{pmatrix}=\mR_z(90^\circ)\sum_i\bx'_i{\bx'_i}\T .
+\]
+The third singular value is zero because the points are coplanar: both the rotation and its
+composition with the reflection across the plane fit the data perfectly. The determinant
+correction selects the rotation, $\mR=\mR_z(90^\circ)$, and $\bt=\mu_y-\mR\mu_x=(\tfrac23,\tfrac73,0)-(-\tfrac13,\tfrac13,0)=(1,2,0)$.
+With fewer than three non-collinear correspondences the rotation is not determined.
+\end{example}
+
+\subsection{Convergence}
+
+Let $E=\sum_id(\mR\bx_i+\bt,Y)^2$. The matching step can only decrease each term (each point gets
+its closest partner) and the alignment step minimises the sum for the current matches, so $E$
+decreases monotonically and, being bounded below, converges. The limit, however, is only a
+\emph{local} minimum: ICP converges to the correct alignment only when started close enough to it.
+Point-to-point ICP also converges slowly (linearly) when the shapes must slide along each other,
+because closest-point pairs pull points towards each other even when they lie on the same flat
+region.
+
+\fig{ch07_icp_iterations.png}{Point-to-point ICP aligning two partially overlapping scans of the
+bunny, starting from a $25^\circ$ rotation and a translation. Pairs farther than three times the
+median distance are rejected, which handles the non-overlapping parts. The rotation error drops from
+$25.0^\circ$ to $0.9^\circ$ after 60 iterations.}{fig:icp-iter}
+
+\section{Variants}
+
+\Citet{Rusinkiewicz2001} decompose ICP into stages, each with several options:
+\begin{enumerate}
+  \item \textbf{Selection} of source points: all points, uniform or random subsampling, or
+  \emph{normal-space sampling}, which picks points so that the normals are spread uniformly and
+  small features that constrain sliding are not drowned out by large flat regions.
+  \item \textbf{Matching}: closest point, closest point along the normal (normal shooting), or
+  projection into the range image of the target (very fast for organised scans).
+  \item \textbf{Weighting}: uniform, decreasing with distance, or with the compatibility of normals
+  $\bn_x\cdot\bn_y$.
+  \item \textbf{Rejection} of outliers: pairs farther than a threshold (a multiple of the median or
+  of the standard deviation of the distances), pairs with incompatible normals, pairs involving
+  boundary points of the target (whose closest-point matches are wrong in partial overlaps), or a
+  fixed fraction of the worst pairs (trimmed ICP).
+  \item \textbf{Error metric}: point-to-point or point-to-plane (below).
+  \item \textbf{Minimisation}: closed form, linearisation, or non-linear least squares.
+\end{enumerate}
+
+\subsection{Point-to-plane ICP}
+
+Uneven sampling is a fundamental problem of the point-to-point metric: samples of the source
+rarely land exactly on samples of the target, so the residual does not vanish even at the correct
+alignment and it penalises motions that slide the surfaces along each other. \Citet{Chen1992}
+minimise instead the distance to the tangent plane of the target,
+\begin{equation}
+E_{\text{plane}}=\sum_i\bigl((\mR\bx_i+\bt-\by_i)\cdot\bn_i\bigr)^2 ,
+\end{equation}
+where $\bn_i$ is the normal of the target at $\by_i$. Tangential motions are free, so flat regions do
+not resist the alignment. There is no closed form, but for small rotations
+$\mR\approx\mI+[\br]_\times$ with $\br=(\alpha,\beta,\gamma)$, and
+$(\mR\bx_i+\bt-\by_i)\cdot\bn_i\approx\br\cdot(\bx_i\times\bn_i)+\bt\cdot\bn_i-(\by_i-\bx_i)\cdot\bn_i$.
+Each pair gives one linear equation in the six unknowns,
+\begin{equation}
+\mathbf a_i\T\begin{pmatrix}\br\\\bt\end{pmatrix}=b_i,\qquad
+\mathbf a_i=\begin{pmatrix}\bx_i\times\bn_i\\\bn_i\end{pmatrix},\qquad b_i=(\by_i-\bx_i)\cdot\bn_i ,
+\end{equation}
+and the least-squares solution follows from the $6\times6$ normal equations
+$\bigl(\sum_i\mathbf a_i\mathbf a_i\T\bigr)\binom{\br}{\bt}=\sum_i\mathbf a_ib_i$ \citep{Low2004}.
+The rotation is rebuilt from $\br$ (with Rodrigues' formula, or by projecting $\mI+[\br]_\times$ onto
+$SO(3)$) and the step is repeated with new correspondences. Each iteration is a Gauss--Newton
+step on the squared distance to the surface, so convergence near the solution is much faster than
+for point-to-point (\cref{fig:icp-conv}). The system is singular when the geometry does not
+constrain all six degrees of freedom: a plane allows in-plane sliding, a sphere allows any rotation
+about its centre, a cylinder allows sliding along and rotating about its axis. The eigenvectors of
+$\sum_i\mathbf a_i\mathbf a_i\T$ with small eigenvalues reveal these unstable directions
+\citep{Gelfand2005}.
+
+\fig[0.85\textwidth]{ch07_convergence.pdf}{Convergence of ICP on two fully overlapping samplings of
+the bunny with a $20^\circ$ initial rotation. Left: root mean square distance to the ground-truth
+positions. Right: rotation error. Point-to-plane reaches the noise floor in a handful of
+iterations; point-to-point converges linearly.}{fig:icp-conv}
+
+\subsection{Basin of convergence}
+
+Because ICP is a local method, its success depends on the initial misalignment.
+\Cref{fig:icp-basin} repeats the registration from random initial rotations of increasing angle:
+both variants always succeed up to $45^\circ$; at $60^\circ$ point-to-point succeeds in $88\%$ of
+the trials and point-to-plane in all of them; beyond $90^\circ$ point-to-point never succeeds and
+point-to-plane only occasionally ($25\%$ at $120^\circ$). Larger misalignments need a global
+method (\cref{ch:global}) to provide the initial guess.
+
+\fign{ch07_basin.pdf}{Fraction of successful registrations (final rotation error below $2^\circ$,
+eight random trials per angle) against the initial rotation angle.}{fig:icp-basin}
+
+\subsection{Robust and non-rigid extensions}
+
+Least squares is sensitive to outliers and to partial overlap, since every wrong match pulls with
+a force proportional to its distance. Robust variants replace the squared distance by a robust
+penalty $\rho(d)$ (Huber, Tukey, or $\ell_p$ with $p<1$ as in Sparse ICP \citep{Bouaziz2013}),
+which are minimised with iteratively reweighted least squares or ADMM. When the shapes deform
+(a moving person, organs), the rigid motion is replaced by a deformation field regularised for
+smoothness or local rigidity, and correspondences are optimised jointly with it \citep{Li2008}.
+
+\section{Multi-view registration}
+
+A complete model needs many scans. Registering them sequentially accumulates drift, so after
+pairwise alignments a global optimisation distributes the error over all pairs (pose-graph
+optimisation), and the aligned scans are merged by reconstruction (\cref{ch:recon}) or by
+volumetric fusion of signed distances \citep{Curless1996}.
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item ICP alternates closest-point matching (kd-tree, $O(N\log M)$) and the closed-form rigid fit
+  $\mR=\mU\diag(1,1,\det\mU\mV\T)\mV\T$, $\bt=\mu_y-\mR\mu_x$.
+  \item The error decreases monotonically but converges only to a local minimum; a good initial
+  alignment is required.
+  \item Point-to-plane ICP linearises the rotation, solves a $6\times6$ system per iteration and
+  converges much faster, because surfaces may slide along each other.
+  \item Sampling, weighting and outlier rejection make ICP robust to partial overlap and noise.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+Show that the optimal translation for a fixed rotation aligns the centroids, and that the problem
+then decouples into finding $\mR$ from the centred point sets.
+\end{exercise}
+\begin{exercise}
+Derive the linear system of point-to-plane ICP and explain why it is singular for a plane, a
+sphere and a cylinder. Which directions are unconstrained in each case?
+\end{exercise}
+\begin{exercise}
+Extend the closed-form solution to similarity transformations $s\mR\bx+\bt$. Show that the optimal
+scale is $s=\tr(\mSigma\mD)/\sum_i\norm{\bx'_i}^2$, with $\mD=\diag(1,1,\det\mU\mV\T)$
+\citep{Umeyama1991}.
+\end{exercise}

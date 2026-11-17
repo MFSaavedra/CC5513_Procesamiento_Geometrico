@@ -1,0 +1,303 @@
+\chapter{Differential Geometry of Surfaces}\label{ch:diffgeo}
+
+Normals, curvatures and geodesic distances are the vocabulary of geometry processing: smoothing
+reduces curvature, simplification preserves it, remeshing aligns elements with principal
+directions, and shape descriptors summarise it. This chapter reviews the differential geometry of
+curves and surfaces and shows how each quantity is computed on a triangle mesh. Classical
+references are \citet{doCarmo1976} for the smooth theory and \citet{Meyer2003,Crane2018} for the
+discrete operators. We use the analyst's Laplacian $\Lap=\Div\grad$ in this chapter.
+
+\section{Curves}
+
+Let $\gamma:[a,b]\to\R^3$ be a regular curve, $\gamma'(t)\neq\bzero$. Its \emph{arc length}
+$s(t)=\int_a^t\norm{\gamma'(\tau)}\dd\tau$ allows a reparameterization with unit speed, in which
+the unit tangent is $\bt(s)=\gamma'(s)$. The \emph{curvature} measures how fast the tangent turns,
+\begin{equation}
+\kappa(s)=\norm{\bt'(s)},\qquad \bt'(s)=\kappa(s)\,\bn(s),
+\end{equation}
+where $\bn$ is the principal normal. The \emph{osculating circle} at $\gamma(s)$ is the circle
+tangent to the curve with radius $1/\kappa$ and centre $\gamma(s)+\bn(s)/\kappa(s)$: it is the
+circle that best approximates the curve to second order. For a planar curve the curvature can be
+given a sign, positive when the curve turns counter-clockwise: if $\theta(s)$ is the angle of the
+tangent, then $\kappa=\dd\theta/\dd s$.
+
+\paragraph{Discrete curvature of a polyline.} For a polygon with vertices $\bp_i$, the tangent is
+constant on each edge and turns by the exterior angle $\theta_i$ at each vertex. Curvature is
+therefore concentrated at the vertices as a Dirac mass, and the natural discrete quantity is
+the \emph{integrated} curvature $\theta_i=\int\kappa\dd s$ over the dual cell of the vertex. Dividing
+by the length of that cell, $\ell_i=\tfrac12(\norm{\bp_{i+1}-\bp_i}+\norm{\bp_i-\bp_{i-1}})$, gives a
+pointwise estimate $\kappa_i\approx\theta_i/\ell_i$ that converges as the polygon is refined
+(\cref{fig:curve}). A useful exact identity follows: for a closed planar polygon the turning angles
+add up to $2\pi$ times the turning number, the discrete version of $\oint\kappa\dd s=2\pi k$.
+
+\fig[0.85\textwidth]{ch04_curve.pdf}{Left: a closed planar curve with osculating circles of
+radius $1/\abs{\kappa}$ at four points; the arrows are the tangent and the normal. Right: exact
+signed curvature against arc length, and the discrete estimate (turning angle divided by the dual
+length) on polygons with $n=24$ and $n=60$ vertices.}{fig:curve}
+
+\section{Surfaces}
+
+\subsection{Tangent plane and normal}
+
+Let $\bx(u,v)$ be a regular parameterization of a surface patch. The partial derivatives $\bx_u$
+and $\bx_v$ span the tangent plane, and the unit normal is
+\begin{equation}
+\bn=\frac{\bx_u\times\bx_v}{\norm{\bx_u\times\bx_v}} .
+\end{equation}
+
+\subsection{First fundamental form}
+
+A tangent vector $\bw=a\bx_u+b\bx_v$ has squared length
+\begin{equation}
+\norm{\bw}^2=\begin{pmatrix}a&b\end{pmatrix}\mathbf{I}\begin{pmatrix}a\\b\end{pmatrix},\qquad
+\mathbf{I}=\begin{pmatrix}E&F\\F&G\end{pmatrix}=\begin{pmatrix}\bx_u\cdot\bx_u&\bx_u\cdot\bx_v\\
+\bx_u\cdot\bx_v&\bx_v\cdot\bx_v\end{pmatrix}.
+\end{equation}
+The first fundamental form $\mathbf I$ (the \emph{metric}) determines lengths of curves, angles
+between tangent vectors and areas, with area element $\dd A=\sqrt{EG-F^2}\dd u\dd v$. Quantities
+that depend only on $\mathbf I$ are called \emph{intrinsic}: they can be measured by an inhabitant
+of the surface without looking at the ambient space, and they do not change when the surface is
+bent without stretching (an \emph{isometric} deformation). Geodesic distances, the Gaussian
+curvature and the Laplace--Beltrami operator are intrinsic; this is the basis of the
+pose-invariant descriptors of \cref{ch:spectral}.
+
+\subsection{Second fundamental form and the shape operator}
+
+The second fundamental form measures how the surface bends away from its tangent plane:
+\begin{equation}
+\mathbf{II}=\begin{pmatrix}e&f\\f&g\end{pmatrix}=\begin{pmatrix}\bx_{uu}\cdot\bn&\bx_{uv}\cdot\bn\\
+\bx_{uv}\cdot\bn&\bx_{vv}\cdot\bn\end{pmatrix}.
+\end{equation}
+Intersecting the surface with the plane spanned by $\bn$ and a unit tangent direction $\bw$ gives a
+curve whose curvature is the \emph{normal curvature}
+\begin{equation}
+\kappa_n(\bw)=\frac{\mathbf{II}(\bw,\bw)}{\mathbf{I}(\bw,\bw)} .
+\end{equation}
+The \emph{shape operator} (Weingarten map) $\mS=\mathbf{I}^{-1}\mathbf{II}$ is self-adjoint with
+respect to the metric. Its eigenvalues $\kappa_1\ge\kappa_2$ are the \emph{principal curvatures},
+the maximum and minimum of $\kappa_n$, and its eigenvectors are the orthogonal \emph{principal
+directions} $\bt_1,\bt_2$. Writing $\bw=\cos\varphi\,\bt_1+\sin\varphi\,\bt_2$ gives Euler's
+theorem
+\begin{equation}
+\kappa_n(\varphi)=\kappa_1\cos^2\varphi+\kappa_2\sin^2\varphi .
+\end{equation}
+
+\begin{definition}[Mean and Gaussian curvature]
+$H=\tfrac12(\kappa_1+\kappa_2)=\tfrac12\tr\mS$ and
+$K=\kappa_1\kappa_2=\det\mS=\dfrac{eg-f^2}{EG-F^2}$.
+\end{definition}
+
+Conversely $\kappa_{1,2}=H\pm\sqrt{H^2-K}$. The sign of $K$ classifies points: \emph{elliptic}
+($K>0$, the surface lies locally on one side of the tangent plane, like a sphere or the top of a
+hill), \emph{hyperbolic} ($K<0$, a saddle), \emph{parabolic} ($K=0$ with one non-zero principal
+curvature, like a cylinder) and \emph{planar} ($\kappa_1=\kappa_2=0$). Points with
+$\kappa_1=\kappa_2$ are \emph{umbilics}; there the principal directions are undefined, which
+creates singularities in direction fields (\cref{ch:remesh}).
+
+\begin{example}{Sphere, cylinder and torus}{curvatures}
+A sphere of radius $r$ with outward normal has $\kappa_1=\kappa_2=1/r$ (with the sign convention
+that convex surfaces have positive curvature), so $H=1/r$ and $K=1/r^2$; every point is umbilic. A
+cylinder of radius $r$ has $\kappa_1=1/r$ around it and $\kappa_2=0$ along it, so $H=1/(2r)$ and
+$K=0$. For the torus $\bx(u,v)=((R+r\cos v)\cos u,(R+r\cos v)\sin u,r\sin v)$ the principal
+curvatures are $1/r$ (around the tube) and $\cos v/(R+r\cos v)$ (around the axis), hence
+\begin{equation}
+K=\frac{\cos v}{r(R+r\cos v)},\qquad H=\frac{R+2r\cos v}{2r(R+r\cos v)} .
+\end{equation}
+The outer half ($\cos v>0$) is elliptic, the inner half hyperbolic, and the top and bottom circles
+parabolic. These exact values are the ground truth of \cref{fig:torus-curv}.
+\end{example}
+
+\subsection{Two global theorems}
+
+\begin{theorem}[Theorema Egregium, Gauss]
+The Gaussian curvature depends only on the first fundamental form, so it is invariant under
+isometric deformations.
+\end{theorem}
+A sheet of paper ($K=0$) can be rolled into a cylinder ($K=0$) but never wrapped around a sphere
+($K>0$) without stretching. The mean curvature, in contrast, is extrinsic: rolling the sheet
+changes $H$ from $0$ to $1/(2r)$.
+
+\begin{theorem}[Gauss--Bonnet]
+For a closed orientable surface $S$, $\displaystyle\int_SK\dd A=2\pi\chi(S)=2\pi(2-2g)$. For a
+surface with boundary, $\displaystyle\int_SK\dd A+\oint_{\partial S}k_g\dd s=2\pi\chi(S)$, where
+$k_g$ is the geodesic curvature of the boundary.
+\end{theorem}
+The total curvature is a topological invariant: denting a sphere creates negative curvature that is
+exactly compensated by positive curvature elsewhere.
+
+\subsection{Mean curvature and the Laplace--Beltrami operator}
+
+On a surface, the Laplace--Beltrami operator $\Lap_S=\Div_S\grad_S$ generalises the Laplacian. Its
+action on the coordinate functions has a remarkable geometric meaning:
+\begin{equation}
+\Lap_S\bx=-2H\bn ,
+\label{eq:mean-curvature-normal}
+\end{equation}
+with $\bn$ the outward normal and $H>0$ on convex regions. On the unit sphere the coordinates are
+spherical harmonics of degree one, $\Lap_S\bx=-2\bx$, in agreement with $H=1$. Identity
+\eqref{eq:mean-curvature-normal} explains why diffusing the coordinates smooths a surface: the
+flow $\partial_t\bx=\Lap_S\bx$ is the \emph{mean curvature flow}, which moves every point against
+the normal with speed $2H$ and flattens bumps (\cref{ch:smooth}). It also identifies minimal
+surfaces ($H=0$) as surfaces whose coordinates are harmonic functions.
+
+\section{Discrete normals}
+
+The normal of a triangle $(\bx_a,\bx_b,\bx_c)$ is
+$\bn_f=(\bx_b-\bx_a)\times(\bx_c-\bx_a)/\norm{\cdot}$, and the norm of the unnormalised cross
+product is twice the area. A mesh has no well-defined normal at the vertices, so vertex normals
+are weighted averages of the normals of the incident faces,
+\begin{equation}
+\bn_i=\frac{\sum_{f\ni i}w_f\bn_f}{\norm{\sum_{f\ni i}w_f\bn_f}},
+\end{equation}
+with common choices \citep{Jin2005}:
+\begin{itemize}
+  \item \textbf{uniform} weights $w_f=1$ (cheap, but depends on how the one-ring is triangulated);
+  \item \textbf{area} weights $w_f=A_f$, obtained for free by summing unnormalised cross products;
+  \item \textbf{angle} weights $w_f=\theta_f$, the interior angle of $f$ at vertex $i$
+  \citep{Thurmer1998}, which do not change when a face is subdivided;
+  \item the weights of \citet{Max1999}, $w_f=\sin\theta_f/(\norm{\be_1}\norm{\be_2})$, exact for
+  vertices on a sphere.
+\end{itemize}
+On a smooth surface sampled by a reasonable triangulation all of them converge to the true normal
+as the mesh is refined (\cref{fig:normals}). The differences matter on coarse, irregular or
+anisotropic meshes and near sharp features, where none of the averages is meaningful and the
+normal should be duplicated per face group.
+
+\fign{ch04_normals.pdf}{Convergence of vertex normals on irregularly triangulated ellipsoids: the
+95th percentile of the angle to the exact normal against the mean edge length $h$. On this smooth
+surface all three weightings converge at about second order, with angle weights slightly more
+accurate on the finest meshes.}{fig:normals}
+
+\section{Discrete curvature}
+
+\subsection{Gaussian curvature: the angle defect}
+
+Flatten the triangles around an interior vertex $i$ into the plane: their angles $\theta_j$ add
+up to $2\pi$ only if the one-ring is flat. The \emph{angle defect}
+\begin{equation}
+\Omega_i=2\pi-\sum_{j}\theta_j \qquad(\pi-\sum_j\theta_j\ \text{at boundary vertices})
+\end{equation}
+is the integrated Gaussian curvature of the dual cell, and $K_i=\Omega_i/A_i$, with $A_i$ the area
+associated to the vertex, is the pointwise estimate. A cone vertex such as the apex of a pyramid
+has positive defect, a saddle vertex has more than $2\pi$ of angle around it and negative defect.
+
+\begin{proposition}[Discrete Gauss--Bonnet]
+For any closed triangle mesh, $\sum_i\Omega_i=2\pi\chi$.
+\end{proposition}
+\begin{proof}
+The angles of all triangles add up to $\pi F$, so $\sum_i\Omega_i=2\pi V-\pi F$. Since $2E=3F$,
+$V-E+F=V-\tfrac12F$, hence $\sum_i\Omega_i=2\pi(V-E+F)=2\pi\chi$.
+\end{proof}
+The statement is exact, not an approximation: on the torus of \cref{fig:torus-curv} the sum of
+angle defects is $-6.7\times10^{-13}$, zero up to floating-point error.
+
+\subsection{Vertex areas}
+
+The area $A_i$ assigned to a vertex should partition the surface. The \emph{barycentric} area is
+one third of the area of the incident triangles. The \emph{Voronoi} area, the part of each triangle
+closer to $i$ than to the other corners, is
+\begin{equation}
+A_i^{\mathrm{Vor}}=\frac18\sum_{j\in\mathcal N(i)}(\cot\alpha_{ij}+\cot\beta_{ij})\norm{\bx_i-\bx_j}^2,
+\end{equation}
+where $\alpha_{ij},\beta_{ij}$ are the angles opposite the edge $ij$. It fails on obtuse
+triangles, where the circumcentre falls outside the triangle, so \citet{Meyer2003} define the
+\emph{mixed} area: the Voronoi area for non-obtuse triangles and $A_f/2$ or $A_f/4$ for obtuse
+triangles, depending on whether the obtuse angle is at $i$.
+
+\subsection{Mean curvature: the cotangent formula}
+
+Discretising \eqref{eq:mean-curvature-normal} with linear finite elements (\cref{ch:smooth}) gives
+the \emph{cotangent formula} \citep{Pinkall1993,Meyer2003}
+\begin{equation}
+(\Lap\bx)_i=\frac{1}{2A_i}\sum_{j\in\mathcal N(i)}(\cot\alpha_{ij}+\cot\beta_{ij})(\bx_j-\bx_i)
+\approx-2H_i\bn_i ,
+\label{eq:cotan}
+\end{equation}
+so $\abs{H_i}=\tfrac12\norm{(\Lap\bx)_i}$ and its sign is the sign of $-(\Lap\bx)_i\cdot\bn_i$. The
+vector $(\Lap\bx)_i$ is also a normal estimate, the \emph{mean curvature normal}, but it vanishes
+on flat regions. With $H$ and $K$ the principal curvatures follow from $\kappa_{1,2}=H\pm\sqrt{H^2-K}$
+(clamping $H^2-K$ at zero, since the two estimates are computed independently).
+
+\fig{ch04_torus_curvature.png}{Discrete curvatures on a torus with $R=1$, $r=0.35$. The angle
+defect reproduces the exact Gaussian curvature (positive outside, negative inside) and the
+cotangent formula the exact mean curvature; the scatter plots against the closed-form values of
+\cref{ex:curvatures} fall on the diagonal.}{fig:torus-curv}
+
+\fig[0.75\textwidth]{ch04_model_curvature.png}{Mean and Gaussian curvature of the bunny. Red is
+positive and blue negative. Ridges such as the rim of the ears have large $H$; the neck and the
+junctions between parts are hyperbolic ($K<0$). The colour ranges are clipped at the 1st and 99th
+percentiles because curvature is very noisy on scanned meshes.}{fig:model-curv}
+
+\subsection{The curvature tensor and principal directions}
+
+Principal directions require the full shape operator, a $2\times2$ symmetric matrix in a local
+tangent frame. Three families of estimators are common:
+\begin{itemize}
+  \item \textbf{Fitting}: express the neighbours of a vertex in a frame $(\be_1,\be_2,\bn)$ and fit
+  a height function $z=\tfrac12(ax^2+2bxy+cy^2)$ by least squares; then
+  $\mS\approx\begin{psmallmatrix}a&b\\b&c\end{psmallmatrix}$. Higher-order polynomial fits
+  (osculating jets) are more accurate on noisy data \citep{Cazals2005}.
+  \item \textbf{Normal variation}: estimate $\mS$ per face from the change of the vertex normals
+  along the edges and average per vertex \citep{Rusinkiewicz2004}.
+  \item \textbf{Edge-based tensors}: sum, over the edges in a neighbourhood, the dihedral angle
+  times the outer product of the edge direction \citep{Taubin1995b,Cohen2003}; the result is a
+  $3\times3$ tensor whose two largest eigenvectors are the principal directions (swapped).
+\end{itemize}
+\Cref{fig:principal} shows principal directions computed by quadric fitting. On the ellipsoid
+they form the familiar lines-of-curvature pattern with four umbilics; on the torus $\bt_1$ is
+everywhere tangent to the meridians.
+
+\fig{ch04_principal.png}{Principal directions $\bt_1$ estimated by local quadric fitting. Left:
+an ellipsoid coloured by $K$. Centre: a torus coloured by $\kappa_2$. Right: the cow Spot coloured
+by the anisotropy $\abs{\kappa_1-\kappa_2}$, which is large on the legs and the horns, where the
+principal directions are well defined.}{fig:principal}
+
+\section{Geodesic distance}
+
+The geodesic distance between two points is the length of the shortest curve on the surface that
+joins them. It is intrinsic and it is the ground truth of many experiments in
+\cref{ch:deform,ch:spectral,ch:fmaps}. Three ways of computing it on a mesh are:
+\begin{itemize}
+  \item \textbf{Dijkstra} on the edge graph: simple and fast, but paths are restricted to edges, so
+  distances are overestimated by a few percent (metrication error) that does not vanish under
+  refinement.
+  \item \textbf{Fast marching} \citep{Kimmel1998}: solves the eikonal equation
+  $\norm{\grad u}=1$ by propagating a front through the triangles, with first-order accuracy.
+  \item \textbf{The heat method} \citep{Crane2013}: (i) diffuse heat from the source for a short
+  time $t\approx h^2$ by solving $(\mM-t\mC)\bu=\bdelta$; (ii) normalise the gradient,
+  $\bm X=-\grad u/\norm{\grad u}$; (iii) solve the Poisson equation $\Lap\phi=\Div\bm X$. Only
+  sparse linear solves with the cotangent matrix are needed, and the factorisations can be reused
+  for every source. The figures of these notes use the heat method with $t=4h^2$.
+\end{itemize}
+The \emph{vector heat method} \citep{Sharp2019} extends the same idea to the transport of tangent
+vectors.
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item The first fundamental form gives lengths, angles and areas; the second gives normal
+  curvatures. The shape operator $\mI^{-1}\mathbf{II}$ has eigenvalues $\kappa_1,\kappa_2$.
+  \item $K$ is intrinsic (Theorema Egregium) and integrates to $2\pi\chi$ (Gauss--Bonnet); $H$ is
+  extrinsic and appears in $\Lap_S\bx=-2H\bn$.
+  \item On meshes: angle defect for $K$ (with an exact discrete Gauss--Bonnet theorem), cotangent
+  formula for $H\bn$, mixed Voronoi areas for normalisation, fitting for principal directions.
+  \item Geodesic distances can be computed by Dijkstra (biased), fast marching or the heat method.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+Compute $\mathbf I$, $\mathbf{II}$, $H$ and $K$ for the paraboloid $z=\tfrac12(ax^2+by^2)$ at the
+origin and interpret the result.
+\end{exercise}
+\begin{exercise}
+Integrate the Gaussian curvature of the torus over $u,v\in[0,2\pi)$ using $\dd A=r(R+r\cos v)\dd u\dd v$
+and verify Gauss--Bonnet.
+\end{exercise}
+\begin{exercise}
+Show that the angle defect of the apex of a regular pyramid with $k$ lateral faces tends to zero as
+the pyramid is flattened and to $2\pi$ as it becomes a needle.
+\end{exercise}
+\begin{exercise}
+Prove that for an equilateral triangle mesh of the plane the cotangent weights are all
+$2\cot(\pi/3)=2/\sqrt3$, so the cotangent and uniform Laplacians coincide up to a constant.
+\end{exercise}
