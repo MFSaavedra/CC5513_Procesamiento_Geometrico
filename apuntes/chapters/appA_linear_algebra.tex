@@ -1,2 +1,107 @@
 \chapter{Linear Algebra Toolkit}\label{app:linalg}
-% STUB
+
+Almost every algorithm in these notes reduces to a few linear algebra problems: symmetric
+eigenproblems (normals, spectral analysis), the singular value decomposition (rigid alignment,
+rotations, distortion), and sparse linear systems or least-squares problems (smoothing,
+reconstruction, parameterization, deformation). This appendix collects the facts used throughout;
+\citet{Golub2013} is the standard reference.
+
+\section{Symmetric eigenproblems and Rayleigh quotients}
+
+A real symmetric matrix $\mA\in\R^{n\times n}$ has real eigenvalues $\lambda_1\le\dots\le\lambda_n$
+and an orthonormal basis of eigenvectors, $\mA=\mQ\mLambda\mQ\T$. The \emph{Rayleigh quotient}
+$R(\bx)=\bx\T\mA\bx/\bx\T\bx$ satisfies
+\begin{equation}
+\lambda_1=\min_{\bx\neq\bzero}R(\bx),\qquad\lambda_n=\max_{\bx\neq\bzero}R(\bx),
+\end{equation}
+attained at the corresponding eigenvectors, and $\lambda_k$ is the minimum of $R$ over vectors
+orthogonal to the first $k-1$ eigenvectors (Courant--Fischer). This is why the normal of a PCA plane fit
+is the eigenvector of the smallest eigenvalue of the covariance matrix (\cref{ch:recon}): with
+Lagrange multipliers, minimising $\bn\T\mC\bn$ subject to $\bn\T\bn=1$ gives $\mC\bn=\lambda\bn$, and the
+objective value is $\lambda$.
+
+\paragraph{Generalized eigenproblems.} For symmetric $\mA$ and symmetric positive definite $\mB$, the
+problem $\mA\bx=\lambda\mB\bx$ has real eigenvalues and $\mB$-orthonormal eigenvectors,
+$\mX\T\mB\mX=\mI$. With the Cholesky factor $\mB=\mathbf G\mathbf G\T$ it reduces to the standard
+problem $(\mathbf G^{-1}\mA\mathbf G^{-\mathsf T})\by=\lambda\by$ with $\by=\mathbf G\T\bx$; for a diagonal
+mass matrix, $\mathbf G=\mM^{1/2}$. The Laplace--Beltrami eigenproblem $\mL\bphi=\lambda\mM\bphi$
+(\cref{ch:smooth,ch:spectral}) is of this type.
+
+\paragraph{Computing a few eigenpairs.} For large sparse matrices only a few eigenpairs are computed,
+with Krylov methods (Lanczos for symmetric problems, implemented in ARPACK and exposed as
+\texttt{scipy.sparse.linalg.eigsh}). Lanczos converges fastest to eigenvalues at the extremes of the
+spectrum, so the smallest eigenvalues of a Laplacian are found with the \emph{shift-invert} mode: the
+eigenvalues $\lambda$ near a shift $\sigma$ become the largest eigenvalues $1/(\lambda-\sigma)$ of
+$(\mL-\sigma\mM)^{-1}\mM$, applied through one sparse factorisation. A small negative shift
+($\sigma=-10^{-8}$) keeps $\mL-\sigma\mM$ positive definite despite the zero eigenvalue. The 200
+eigenpairs of the 27\,894-vertex cats in \cref{ch:spectral} take about nine seconds this way.
+
+\section{The singular value decomposition}
+
+Every matrix $\mA\in\R^{m\times n}$ factors as $\mA=\mU\mSigma\mV\T$ with orthogonal $\mU$, $\mV$ and
+non-negative singular values $\sigma_1\ge\sigma_2\ge\dots$ on the diagonal of $\mSigma$. It provides:
+\begin{itemize}
+  \item the best rank-$r$ approximation in the Frobenius and spectral norms (keep the first $r$
+  singular values, Eckart--Young), used in PCA;
+  \item the pseudo-inverse $\mA^+=\mV\mSigma^+\mU\T$, giving minimum-norm least-squares solutions for
+  rank-deficient systems (for example the singular quadrics of \cref{ch:ops});
+  \item the \emph{orthogonal Procrustes} solution: the orthogonal matrix closest to $\mA$ in the
+  Frobenius norm is $\mU\mV\T$, and the rotation closest to it is
+  $\mU\diag(1,\dots,1,\det\mU\mV\T)\mV\T$. This solves rigid alignment (\cref{ch:icp}), the local step of
+  ARAP (\cref{ch:deform}), the orthonormal projection of spectral ICP (\cref{ch:fmaps}), and the
+  projection of a linearised rotation onto $SO(3)$;
+  \item the stretches of a linear map: the singular values of a Jacobian measure its distortion
+  (\cref{ch:param}).
+\end{itemize}
+
+\section{Least squares}
+
+For an overdetermined system $\mA\bx\approx\bb$, the least-squares solution minimises
+$\norm{\mA\bx-\bb}^2$ and satisfies the \emph{normal equations} $\mA\T\mA\bx=\mA\T\bb$. They are
+solved with a Cholesky factorisation of $\mA\T\mA$ when $\mA$ is well conditioned and sparse, and with a
+QR factorisation or the SVD otherwise, since forming $\mA\T\mA$ squares the condition number.
+
+\paragraph{Weighted and regularised problems.} Soft constraints add weighted rows:
+$\min\norm{\mA\bx-\bb}^2+w^2\norm{\mS\bx-\bc}^2$ gives $(\mA\T\mA+w^2\mS\T\mS)\bx=\mA\T\bb+w^2\mS\T\bc$, as in
+Laplacian editing (\cref{ch:deform}). Tikhonov regularisation adds $\rho\norm{\bx}^2$, giving
+$(\mA\T\mA+\rho\mI)\bx=\mA\T\bb$, as in smoothing RBF interpolation (\cref{ch:recon}).
+
+\paragraph{Hard constraints.} $\min\norm{\mA\bx-\bb}^2$ subject to $\mathbf E\bx=\bd$ is solved either by
+eliminating the constrained variables (when the constraints fix some entries of $\bx$, as for fixed
+boundary vertices in \cref{ch:param}) or with Lagrange multipliers, through the symmetric indefinite
+KKT system
+\begin{equation}
+\begin{pmatrix}\mA\T\mA&\mathbf E\T\\\mathbf E&\bzero\end{pmatrix}\begin{pmatrix}\bx\\\boldsymbol\mu\end{pmatrix}
+=\begin{pmatrix}\mA\T\bb\\\bd\end{pmatrix} .
+\end{equation}
+
+\section{Sparse linear systems}
+
+Mesh operators are sparse: a Laplacian has about seven non-zeros per row. Sparse matrices are stored
+in compressed sparse row (CSR) or column format, and the matrices of these notes (cotangent
+matrices, $\mM-h\mC$, $\mL\T\mL+w^2\mS\T\mS$) are symmetric positive (semi-)definite. Two families of
+solvers are used:
+\begin{itemize}
+  \item \textbf{Direct}: sparse Cholesky ($\mathbf G\mathbf G\T$) after a fill-reducing reordering
+  (approximate minimum degree, nested dissection). The factorisation is computed once and reused for
+  many right-hand sides (the three coordinates, every time step, every handle position), which is why
+  implicit smoothing, Laplacian editing and ARAP are interactive. In Python,
+  \texttt{scipy.sparse.linalg.factorized} or \texttt{splu}, and CHOLMOD through
+  \texttt{scikit-sparse}.
+  \item \textbf{Iterative}: conjugate gradients for symmetric positive definite systems, with a
+  preconditioner (Jacobi, incomplete Cholesky), and multigrid methods for very large or adaptive
+  problems such as Poisson reconstruction on octrees. They need only matrix--vector products and
+  little memory, and can be stopped early.
+\end{itemize}
+Dense methods are reserved for small problems: the RBF system of \cref{ch:recon} is dense and costs
+$O(N^3)$ unless fast multipole methods are used.
+
+\section{Principal component analysis}
+
+For points $\bp_1,\dots,\bp_n$ with centroid $\bar\bp$, the covariance
+$\mC=\frac1n\sum_i(\bp_i-\bar\bp)(\bp_i-\bar\bp)\T$ is symmetric positive semi-definite. Its eigenvectors
+are the principal axes and its eigenvalues the variances along them. PCA appears in normal estimation
+(smallest axis, \cref{ch:recon}), in the local frames of Harris 3D (\cref{ch:global}), in pose
+normalisation (largest axes, \cref{ch:shape}), and in the surface variation
+$\lambda_0/(\lambda_0+\lambda_1+\lambda_2)$. Equivalently, the principal axes are the right singular
+vectors of the centred data matrix, which is the numerically preferred way to compute them.

@@ -1,2 +1,320 @@
 \chapter{Spectral Shape Analysis}\label{ch:spectral}
-% STUB
+
+Spectral shape analysis studies a shape through the eigenvalues and eigenfunctions of its
+Laplace--Beltrami operator. Because the operator depends only on the metric, everything built from
+its spectrum is invariant to isometric deformations: a cat is described in the same way whether it
+stands, sits or licks its paw. The eigenfunctions also form a Fourier basis on the surface, which
+turns the heat and wave equations into simple filters and leads to descriptors (ShapeDNA, the heat
+and wave kernel signatures), distances (diffusion, commute-time, biharmonic) and canonical
+embeddings. This chapter follows Tema 13 and the companion notebook, which uses the cats and horses
+of the TOSCA collection in several poses. From now on we use the \emph{positive} Laplacian
+$L=-\Div\grad$, discretised by $\mL=-\mC$, and the generalized eigenproblem
+\begin{equation}
+\mL\bphi_k=\lambda_k\mM\bphi_k,\qquad 0=\lambda_1<\lambda_2\le\dots,\qquad \mPhi\T\mM\mPhi=\mI ,
+\label{eq:spec}
+\end{equation}
+on meshes rescaled to unit area. Eigenfunctions are indexed from $\phi_1$ (constant) as in the
+figures.
+
+\section{Why spectral analysis}
+
+\begin{itemize}
+  \item \textbf{Intrinsic}: the spectrum is invariant to rigid motions and to isometric bending, the
+  deformations of articulated and organic shapes.
+  \item \textbf{Multiscale}: low frequencies describe the global structure, high frequencies the
+  details, and filters in the spectral domain select the scale.
+  \item \textbf{Efficient}: a few hundred eigenpairs, computed once with a sparse eigensolver, are
+  enough for most tasks.
+  \item \textbf{Physical}: heat diffusion and wave propagation have closed-form solutions in the
+  eigenbasis, which gives every construction a physical interpretation.
+\end{itemize}
+
+\section{Calculus on manifolds}
+
+Recall from \cref{ch:diffgeo,ch:smooth} that on a Riemannian manifold $\M$ with metric $g$, the
+gradient $\grad f$ of a function is the tangent vector field with $\dd f(\bw)=g(\grad f,\bw)$, the
+divergence of a tangent field $\bm X$ measures its net flow out of an infinitesimal region
+($\int_\Omega\Div\bm X=\oint_{\partial\Omega}\inner{\bm X}{\bn}$), and the Laplace--Beltrami operator is
+$\Lap f=\Div\grad f$. With the positive sign convention $L=-\Lap$, Green's identity reads
+$\int_\M gLf\dd A=\int_\M\inner{\grad f}{\grad g}\dd A$, so $L$ is symmetric and positive
+semi-definite. On a graph, the analogous operator is the graph Laplacian $\mL=\mD-\mA$ (degree minus
+adjacency); on a triangle mesh, the cotangent stiffness matrix of \eqref{eq:cotan-matrix} with the sign
+flipped, together with the mass matrix $\mM$.
+
+\paragraph{Properties and the absence of a free lunch.} A good discrete Laplacian should be
+symmetric, local, have linear precision (vanish on linear functions in flat regions), have positive
+weights (a maximum principle), and converge to the smooth operator under refinement.
+\citet{Wardetzky2007} showed that no discrete Laplacian has all of these properties on general
+meshes. The cotangent Laplacian satisfies all but positivity, which fails on non-Delaunay edges;
+since it converges and has linear precision, it is the standard choice for spectral analysis.
+
+\section{Physics: heat and waves}
+
+The \emph{heat equation} $\partial_tu=-Lu$ describes diffusion, and the \emph{wave equation}
+$\partial_t^2u=-Lu$ describes vibrations of a membrane shaped like the surface. In both cases, the
+eigenfunctions are the natural modes: expanding $u$ in the eigenbasis, each mode evolves
+independently, decaying as $e^{-\lambda_kt}$ under heat diffusion, and oscillating with frequency
+$\sqrt{\lambda_k}$ as a standing wave. The eigenvalues are the squared frequencies at which the surface
+``sounds''. Kac's famous question, \emph{can one hear the shape of a drum?}, asks whether the
+spectrum determines the shape. The answer is no: there are isospectral shapes that are not isometric.
+In practice, however, such shapes are rare and the spectrum is a very discriminative signature.
+
+\section{Eigenvalues and eigenfunctions}
+
+The eigenpairs \eqref{eq:spec} have several properties that matter for shape analysis:
+\begin{itemize}
+  \item $\lambda_1=0$ with constant $\phi_1=1/\sqrt{A}$; the number of zero eigenvalues equals the
+  number of connected components.
+  \item \textbf{Isometry invariance}: isometric shapes have the same eigenvalues, and eigenfunctions
+  that correspond through the isometry (up to sign and up to rotations within eigenspaces).
+  \item \textbf{Scaling}: scaling the shape by $s$ scales every eigenvalue by $1/s^2$, so eigenvalues
+  are normalised by the area, $\tilde\lambda_k=A\lambda_k$, or the mesh is rescaled to unit area.
+  \item \textbf{Weyl's law} \citep{Weyl1911}: for a surface of area $A$,
+  \begin{equation}
+  \lambda_k\sim\frac{4\pi}{A}\,k\qquad(k\to\infty),
+  \end{equation}
+  so the spectrum grows linearly, and the deviation from this line carries the shape information.
+  \item \textbf{Nodal domains}: $\phi_k$ has at most $k$ nodal domains (Courant's theorem), so higher
+  eigenfunctions oscillate more.
+  \item \textbf{Ambiguities}: each eigenfunction is defined up to sign, and eigenfunctions with equal
+  or nearly equal eigenvalues can mix or swap order between two shapes.
+\end{itemize}
+
+\fig{ch15_eigenfunctions.png}{Eigenfunctions $\phi_2$ to $\phi_6$ of a standing cat (top) and of the
+same cat sitting and licking its paw (bottom), with signs aligned. The titles give the eigenvalues
+of both poses: they agree within a few percent except $\lambda_4$ ($18.5$ against $21.7$), because
+the deformation is only approximately isometric. The eigenfunctions vary along the body, the
+tail, the legs and the head in the same way in both poses.}{fig:eigfun}
+
+\section{ShapeDNA}
+
+\citet{Reuter2006} proposed the sequence of the first $N$ eigenvalues of the area-normalised
+Laplace--Beltrami operator as a fingerprint, the \emph{ShapeDNA}:
+\begin{equation}
+\mathrm{DNA}(S)=(\tilde\lambda_2,\tilde\lambda_3,\dots,\tilde\lambda_{N+1}) .
+\end{equation}
+It is isometry invariant, needs no alignment and no correspondence, and is compact. Shapes are
+compared with a distance between the sequences; since the eigenvalues grow linearly, the differences
+are divided by $k$ (or the eigenvalues normalised by Weyl's law) so that the high frequencies do not
+dominate. \Cref{fig:shapedna} compares ShapeDNA with the extrinsic D2 shape distribution of
+\cref{ch:shape} on five cats and five horses in different poses: with ShapeDNA every shape's nearest
+neighbour has the right class (accuracy $1.0$), with D2 one cat is closest to a horse ($0.9$).
+
+\fig{ch15_shapedna.png}{Left: normalised eigenvalues $A\lambda_k/(4\pi k)$ of five cats and five horses
+in different poses; they approach Weyl's limit $1$ slowly, and the two classes form separate bands.
+Centre and right: distance matrices between the ten shapes with the extrinsic D2 distribution and with
+ShapeDNA (dark is similar). ShapeDNA shows a clean two-class block structure; D2 is affected by the
+poses.}{fig:shapedna}
+
+ShapeDNA also has limitations: the notebook shows what it does not see (isospectral shapes, and
+local changes that barely affect the low spectrum) and what it sees too much (topological noise, such
+as a small handle created by a scanning artefact, or a change of mesh connectivity between parts,
+changes the spectrum strongly).
+
+\section{Fourier analysis on manifolds}
+
+On the circle, the Fourier basis $e^{\mathrm ikx}$ consists of eigenfunctions of the second derivative.
+On a manifold the eigenfunctions of $L$ play the same role: any $f\in L^2(\M)$ expands as
+\begin{equation}
+f=\sum_k\hat f_k\phi_k,\qquad \hat f_k=\inner{f}{\phi_k}_\M=\int_\M f\phi_k\dd A\approx\bphi_k\T\mM\bfun ,
+\end{equation}
+with Parseval's identity $\int_\M f^2\dd A=\sum_k\hat f_k^2$. Truncating the expansion is low-pass
+filtering (\cref{ch:smooth}), and since $\inner{Lf}{f}=\sum_k\lambda_k\hat f_k^2$, the eigenvalue
+measures the ``frequency'' (the Dirichlet energy) of each mode. To compare bases of two shapes, the
+notebook correlates their eigenfunctions through a known correspondence and fixes the signs: the
+matrix of inner products is nearly diagonal for low frequencies, with small blocks where eigenvalues
+are close. This matrix is the functional map of \cref{ch:fmaps}.
+
+\section{Heat diffusion and the heat kernel}
+
+\subsection{Heat diffusion}
+
+The heat equation $\partial_tu=-Lu$ with initial condition $u(\cdot,0)=u_0$ has the solution
+\begin{equation}
+u(x,t)=\sum_ke^{-\lambda_kt}\inner{u_0}{\phi_k}\phi_k(x)=\int_\M h_t(x,y)\,u_0(y)\dd y ,
+\end{equation}
+computed in the eigenbasis by multiplying each Fourier coefficient by $e^{-\lambda_kt}$
+(\cref{fig:heat}). The total heat $\int u$ is conserved, and as $t\to\infty$ the temperature becomes
+uniform.
+
+\fig{ch15_heat.png}{Heat diffusing from the tip of the tail of the cat. At $t=0$ the heat is an
+indicator of a small ball; it spreads along the tail and then over the body. Each panel uses its
+own colour range; truncation to 200 eigenfunctions is accurate for $t\ge0.002$.}{fig:heat}
+
+\subsection{The heat kernel}
+
+The \emph{heat kernel} is the fundamental solution, the temperature at $y$ at time $t$ when a unit
+amount of heat is placed at $x$:
+\begin{equation}
+h_t(x,y)=\sum_{k\ge1}e^{-\lambda_kt}\phi_k(x)\phi_k(y) .
+\end{equation}
+It is symmetric, positive, conserves heat ($\int_\M h_t(x,y)\dd y=1$), satisfies the semigroup property
+$h_{t+s}(x,z)=\int_\M h_t(x,y)h_s(y,z)\dd y$, and is invariant to isometries. Small times probe a small
+neighbourhood of $x$ and large times the global shape (\cref{fig:heatkernel}); for $t\to\infty$,
+$h_t(x,y)\to1/A$. In the discrete setting, $h_t(x,\cdot)=\mPhi e^{-t\mLambda}\mPhi\T\be_x$ with the
+truncated eigenbasis, or $\exp(-t\mM^{-1}\mL)$ applied to a delta for exact results.
+
+\fig[0.75\textwidth]{ch15_heat_kernel.png}{Heat kernels $h_t(x,\cdot)$ from a point on an ear (top)
+and from a point on the back (bottom) at three times. Each panel uses its own colour range, from
+light (low) to dark (high). Small times are local; at $t=0.2$ the heat has reached the whole
+body.}{fig:heatkernel}
+
+\section{Diffusion maps and distances}
+
+The heat kernel defines a family of embeddings and distances \citep{Coifman2006}. The \emph{diffusion
+map} at scale $t$ sends a point to the vector of its weighted eigenfunction values,
+\begin{equation}
+\Psi_t(x)=\bigl(e^{-\lambda_2t}\phi_2(x),\,e^{-\lambda_3t}\phi_3(x),\,\dots\bigr),
+\end{equation}
+and the \emph{diffusion distance} is the Euclidean distance in this space,
+\begin{equation}
+d_t^2(x,y)=\norm{\Psi_t(x)-\Psi_t(y)}^2=\sum_ke^{-2\lambda_kt}\bigl(\phi_k(x)-\phi_k(y)\bigr)^2
+=h_{2t}(x,x)+h_{2t}(y,y)-2h_{2t}(x,y) .
+\end{equation}
+Two points are close in diffusion distance if heat diffuses easily between them, through many short
+paths; the distance is robust to topological noise and small holes, which change geodesic distances
+drastically. The scale $t$ chooses which features matter: at small $t$ the diffusion distance saturates
+quickly away from the source, and at large $t$ only the coarse structure remains.
+
+Changing the weights $e^{-\lambda t}$ for other functions $g(\lambda)$ gives other distances,
+$d^2(x,y)=\sum_kg(\lambda_k)^2(\phi_k(x)-\phi_k(y))^2$:
+\begin{itemize}
+  \item the \emph{commute-time} distance, $g(\lambda)=1/\sqrt\lambda$, related to the expected time of a
+  random walk to go from $x$ to $y$ and back; the corresponding embedding is the GPS below;
+  \item the \emph{biharmonic} distance \citep{Lipman2010}, $g(\lambda)=1/\lambda$, which is smooth, has
+  no free parameter, and behaves like the geodesic distance globally while being smooth near the
+  source.
+\end{itemize}
+
+\fig{ch15_distances.png}{Distances from a point on an ear of the cat: geodesic distance (heat
+method), diffusion distances at two scales, commute-time (GPS) and biharmonic distances. The Spearman
+rank correlations with the geodesic distance are $0.89$ and $0.97$ for diffusion at $t=0.01$ and
+$t=0.1$, $0.94$ for GPS and $0.99$ for the biharmonic distance.}{fig:distances}
+
+\paragraph{The GPS embedding.} \citet{Rustamov2007} proposed the \emph{global point signature}
+\begin{equation}
+\mathrm{GPS}(x)=\Bigl(\frac{\phi_2(x)}{\sqrt{\lambda_2}},\frac{\phi_3(x)}{\sqrt{\lambda_3}},\dots\Bigr)
+\end{equation}
+as a canonical form of the shape: it is isometry invariant, so two poses of the same shape map to the
+same point set up to the sign and mixing ambiguities, and the Euclidean distance between embedded
+points is the commute-time distance (the GPS is the embedding of the Green's function of $L$). The
+alternative canonical forms of \citet{Elad2003} embed geodesic distances with multidimensional scaling.
+
+\fig{ch15_gps.png}{GPS embedding (first three coordinates) of two poses of the cat, coloured by the
+$x$ coordinate of the standing pose. Both embeddings look alike, with the tail as the long branch
+and the legs as shorter ones. Their relative difference is $20\%$, partly because some eigenvalues
+change between the poses ($\lambda_4$ goes from $18.5$ to $21.7$).}{fig:gps}
+
+\section{Local descriptors}
+
+\subsection{The heat kernel signature}
+
+\citet{Sun2009} restrict the heat kernel to the diagonal, the amount of heat that remains at $x$ after
+time $t$:
+\begin{equation}
+\mathrm{HKS}(x,t)=h_t(x,x)=\sum_ke^{-\lambda_kt}\phi_k(x)^2 .
+\end{equation}
+Sampled at a set of times, it gives a vector at every point that is
+\begin{itemize}
+  \item \textbf{intrinsic}, hence invariant to isometric deformations;
+  \item \textbf{multiscale}: small $t$ describes the local geometry, large $t$ the global position of the
+  point in the shape;
+  \item \textbf{informative}: under mild conditions the family $\{h_t(x,x)\}_{t>0}$ determines the
+  whole heat kernel, hence the metric;
+  \item \textbf{stable} under small perturbations of the shape.
+\end{itemize}
+The times are usually sampled logarithmically between $t_{\min}=4\ln10/\lambda_{\max}$ and
+$t_{\max}=4\ln10/\lambda_2$, where $\lambda_{\max}$ is the largest computed eigenvalue, and the
+signatures are normalised by the heat trace $\sum_ke^{-\lambda_kt}$ to remove the dependence on scale
+(\cref{fig:hks}).
+
+\fig{ch15_hks.png}{Logarithm of the HKS at four times on the two poses of the cat, with a common
+colour range per column. At small times the extremities (paws, tail tip, ears) retain more heat than
+the body, since heat escapes slowly from protruding regions of positive curvature; at large times
+only the global position along the body matters. The median relative difference between the
+poses is between $2\%$ and $8\%$ depending on $t$.}{fig:hks}
+
+\paragraph{HKS and Gaussian curvature.} For small $t$ the heat kernel has the asymptotic expansion
+\begin{equation}
+h_t(x,x)=\frac{1}{4\pi t}+\frac{K(x)}{12\pi}+O(t),
+\end{equation}
+so the HKS at small times is an intrinsic, multiscale version of the Gaussian curvature. On a mesh,
+``small'' must still be larger than the squared edge length: below that scale the discrete heat
+does not leave the vertex and the HKS measures the vertex area instead (\cref{fig:hks-curv}).
+
+\fig{ch15_hks_curvature.pdf}{HKS against Gaussian curvature on an ellipsoid with semi-axes
+$1.3$, $1$, $0.6$. Left: exact $K$. Centre: Pearson correlation between the HKS and $K$ against $t/h^2$
+(with $h$ the mean edge length). For $t\lesssim h^2$ the correlation is negative, because the HKS then
+reflects the vertex areas; it peaks at $0.974$ around $t/h^2\approx11$ and decreases at large $t$, where
+global effects dominate. Right: at the best $t$, $\mathrm{HKS}-1/(4\pi t)$ grows with $K$ with slope
+$0.020$, close to the theoretical $1/(12\pi)=0.027$.}{fig:hks-curv}
+
+\subsection{The wave kernel signature}
+
+The HKS filters $e^{-t\lambda}$ are low-pass: every scale is dominated by the lowest frequencies, so the
+descriptor localises features poorly. \citet{Aubry2011} replace diffusion by the evolution of a quantum
+particle, governed by the Schr\"odinger equation $\mathrm i\,\partial_t\psi=L\psi$. If the particle has
+an energy distribution $f_e(\lambda)$ around energy $e$, its average probability of being at $x$ is
+\begin{equation}
+\mathrm{WKS}(x,e)=\frac{\sum_k\phi_k(x)^2f_e(\lambda_k)^2}{\sum_kf_e(\lambda_k)^2},\qquad
+f_e(\lambda)^2=\exp\Bigl(-\frac{(e-\log\lambda)^2}{2\sigma^2}\Bigr),
+\end{equation}
+with log-normal energy distributions, since the eigenvalues grow linearly and their logarithms are
+more evenly spread. The energies $e$ are sampled uniformly in $[\log\lambda_2,\log\lambda_{\max}]$ and
+$\sigma$ is a multiple of the spacing. The filters are \emph{band-pass}, so each component of the WKS
+isolates a range of frequencies, giving better localisation and better matching, at the cost of
+less robustness to large deformations (\cref{fig:wks,fig:matching}).
+
+\fig{ch15_wks.png}{Top: the HKS filters $e^{-t\lambda}$ are low-pass, while the WKS filters
+$f_e^2(\lambda)$ are band-pass in $\log\lambda$; the ticks mark the eigenvalues of the cat. Bottom:
+logarithm of the WKS at four energies. Low energies behave like the global HKS; high energies reveal
+fine, oscillating patterns.}{fig:wks}
+
+\subsection{Matching with descriptors}
+
+Since the descriptors are isometry invariant, corresponding points of two poses have similar
+descriptors, and the nearest neighbour in descriptor space is a correspondence candidate. Since the
+TOSCA meshes share their vertex ordering across poses, the quality of such matches can be measured by
+the geodesic distance between the matched point and the true one (\cref{fig:matching}). Pointwise
+descriptor matching is noisy, especially between symmetric parts (left and right legs have identical
+descriptors), so it is used as a starting point for the functional maps of \cref{ch:fmaps}.
+
+\fign{ch15_matching.pdf}{Correspondences between two poses of the cat by nearest neighbour in
+descriptor space, for 300 random points. Fraction of points matched within a geodesic error (shapes of
+unit area): the WKS (median error $0.084$) localises better than the HKS ($0.106$). Many errors come from
+symmetric flips.}{fig:matching}
+
+\begin{notebook}{Tema13\_Analisis\_Espectral.ipynb}
+Block 1 computes the spectrum and ShapeDNA and uses it for retrieval; block 2 studies eigenfunctions,
+their correlation across poses with sign correction, and the spectral Fourier transform; block 3
+diffuses heat and computes heat kernels; block 4 builds diffusion maps, compares diffusion and geodesic
+distances and computes the GPS embedding; block 5 implements the HKS, its relation to Gaussian
+curvature (with the angle defect), the WKS and correspondences by descriptors. An optional exercise
+repeats the analysis on the Stanford bunny.
+\end{notebook}
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item The eigenpairs of $\mL\bphi=\lambda\mM\bphi$ are intrinsic, multiscale and cheap to compute;
+  eigenvalues grow like $4\pi k/A$ (Weyl).
+  \item ShapeDNA (normalised eigenvalues) is a pose-invariant global signature.
+  \item The heat kernel $h_t(x,y)=\sum e^{-\lambda_kt}\phi_k(x)\phi_k(y)$ yields diffusion distances,
+  and other spectral weights yield commute-time (GPS) and biharmonic distances.
+  \item HKS $=h_t(x,x)$ is a multiscale, curvature-like descriptor (low-pass); the WKS uses band-pass
+  filters in $\log\lambda$ and localises better.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+Show that scaling a surface by $s$ multiplies the eigenvalues by $1/s^2$ and the $L^2$-normalised
+eigenfunctions by $1/s$. How do the HKS and the diffusion distance transform?
+\end{exercise}
+\begin{exercise}
+Prove the identity $d_t^2(x,y)=h_{2t}(x,x)+h_{2t}(y,y)-2h_{2t}(x,y)$.
+\end{exercise}
+\begin{exercise}
+Using the eigenpairs of the unit sphere ($\ell(\ell+1)$ with multiplicity $2\ell+1$) and the addition
+theorem $\sum_m Y_\ell^m(x)^2=(2\ell+1)/(4\pi)$, show that the HKS of the sphere is constant and compute
+it.
+\end{exercise}

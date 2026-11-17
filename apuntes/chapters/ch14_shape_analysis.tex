@@ -1,2 +1,210 @@
 \chapter{Shape Analysis}\label{ch:shape}
-% STUB
+
+Algorithms on images work well for many tasks, but 2D information is often not enough: an image
+loses depth, depends on the viewpoint and confuses shape with appearance. With 3D sensors becoming
+common, \emph{shape analysis} incorporates 3D data into the process: it extracts knowledge from the
+geometry. This chapter defines the main tasks, then studies global descriptors for similarity and
+retrieval, local descriptors and the bag-of-features approach for partial similarity, and symmetry
+detection, with applications to cultural heritage from the work of the course's lecturer. It
+follows Tema 12; spectral descriptors, which underlie several of these methods, are developed in
+\cref{ch:spectral}.
+
+\section{Tasks}
+
+For a shape $O=(V,E)$, the main tasks of shape analysis can be written as functions:
+\begin{itemize}
+  \item \textbf{saliency detection}, $f:V\to\R$, assigns to each vertex a value that indicates its
+  importance (for example to place interest points, \cref{ch:global});
+  \item \textbf{segmentation}, $f:V\to\mathcal L$, assigns to each vertex a label from a set
+  $\mathcal L$, one per segment or part;
+  \item \textbf{symmetry detection} finds non-trivial transformations $T$ with $T(O)\cong O$, which
+  preserve the shape of the object;
+  \item \textbf{characterisation}, $f:V\to\R^n$, assigns to each vertex an $n$-dimensional vector that
+  describes the local geometry (a local descriptor);
+  \item \textbf{similarity}, $f:\mathcal U\times\mathcal U\to\R$, measures how similar two objects of a
+  universe $\mathcal U$ are; it underlies retrieval and classification.
+\end{itemize}
+
+\section{Global descriptors}
+
+The \emph{global} approach transforms a 3D object into a numerical or symbolic representation,
+usually a feature vector (sometimes a graph), and compares two objects through their
+representations with a distance (L1, L2, $\chi^2$). The feature vector approach has been studied
+extensively, and indexing structures make retrieval systems scalable to large collections. A
+descriptor must be invariant to the transformations that should not change the similarity:
+translation, scale and rotation for rigid objects, and isometric deformation for articulated ones.
+
+\subsection{Pose normalisation}
+
+Many descriptors are not rotation invariant, and the usual remedy is to bring every object to a
+canonical pose first:
+\begin{enumerate}
+  \item translate the centre of mass of the surface to the origin;
+  \item rotate the object so that the axes of largest spread of the surface (the principal
+  components of the area-weighted covariance of its points) align with $x$, $y$ and $z$;
+  \item scale it to a standard size.
+\end{enumerate}
+PCA determines the axes only up to sign and order: each eigenvector can be flipped, and axes with
+similar variance can swap under small perturbations. Heuristics fix the signs (for example by the
+sign of the third moment along each axis), but they fail on nearly symmetric objects
+(\cref{fig:pose}). Pose normalisation therefore works for classes with low intra-class variability;
+an alternative is to make the descriptor itself rotation invariant, for example with spherical
+harmonic magnitudes \citep{Kazhdan2003}.
+
+\fig[0.6\textwidth]{ch14_pose_normalization.png}{Pose normalisation by PCA. Left: an airplane in an
+arbitrary orientation with its principal axes (red, green, blue in decreasing variance). Right: after
+alignment the principal axes coincide with the coordinate axes. The third-moment rule chose signs
+that put the airplane upside down, a typical failure of sign disambiguation.}{fig:pose}
+
+\subsection{The depth-buffer descriptor}
+
+Image-based descriptors convert a 3D object into a set of images and extract numerical information
+from them. The \emph{depth-buffer} descriptor \citep{Vranic2004} renders six orthographic depth
+images of the pose-normalised object, looking along $\pm x$, $\pm y$ and $\pm z$, applies the 2D
+discrete Fourier transform to each image, and keeps the magnitudes of the lowest frequencies as the
+feature vector (\cref{fig:depthbuffer}). Magnitudes are invariant to cyclic shifts and the low
+frequencies are robust to small details. The problem of image-based descriptors is that the images
+differ when the pose changes, hence the need for pose normalisation; the light field descriptor
+\citep{Chen2003} instead compares silhouettes from the vertices of a dodecahedron, minimising over
+the rotations of the dodecahedron.
+
+\fig{ch14_depth_buffer.png}{Depth-buffer descriptor of the normalised airplane: six orthographic
+depth images (brighter is closer to the viewer) and the logarithm of the magnitude of the 2D Fourier
+transform of the $+z$ image. The low-frequency magnitudes form the descriptor.}{fig:depthbuffer}
+
+\subsection{PANORAMA}
+
+PANORAMA \citep{Papadakis2010} is also image-based and requires pose normalisation, but uses
+cylindrical instead of rectangular projections. For a cylinder aligned with a principal axis, it
+casts rays from the axis outwards at angles $\theta$ and heights $z$, and records the distance of the
+outermost intersection with the surface, $s(\theta,z)$ (and, in a second image, the orientation of
+the normal there). The result is a panoramic image of the whole object, computed for the three
+principal axes, and the descriptor is formed by the magnitudes of its 2D Fourier coefficients and by
+statistics of its wavelet coefficients (\cref{fig:panorama}). The cylindrical projection captures the
+whole object in each image, including parts hidden in orthographic views.
+
+\fig{ch14_panorama.png}{PANORAMA for a horse. Left: the cylinder axis is the first principal axis
+(dashed). Centre: the panoramic image $s(\theta,z)$; bright values are surface points far from the
+axis (legs, neck and head), dark values points close to it. Right: low-frequency magnitudes of its 2D
+Fourier transform.}{fig:panorama}
+
+\subsection{Shape distributions}
+
+Statistical descriptors avoid alignment altogether. The \emph{D2 shape distribution}
+\citep{Osada2002} is the histogram of the Euclidean distances between pairs of random points on the
+surface, normalised by the mean distance. It is invariant to rigid motions and scale, cheap and
+robust to noise and tessellation. Like all descriptors based on Euclidean distances it is
+\emph{extrinsic}: it changes when an articulated object changes pose. \Cref{fig:shapedna} in the next
+chapter compares it with the intrinsic ShapeDNA on cats and horses in several poses: with D2 the
+nearest neighbour of one of the cat poses is a horse, while the intrinsic descriptor classifies every
+shape correctly.
+
+\subsection{Evaluating retrieval}
+
+A retrieval system ranks the collection by similarity to a query. With class labels as ground truth,
+it is evaluated by precision--recall curves, the \emph{nearest neighbour} rate (the fraction of
+queries whose closest match is of the same class), the \emph{first} and \emph{second tier} (the
+fraction of the class retrieved in the first $C-1$ and $2(C-1)$ results, for a class of size $C$), and
+the discounted cumulative gain, which rewards correct results near the top. The Princeton Shape
+Benchmark \citep{Shilane2004} and the SHREC contests provide standard collections.
+
+\section{Partial similarity and local descriptors}
+
+\emph{Partial similarity} arises in two situations. In the first, objects share similar parts, whose
+extent is not known a priori (two chairs with the same legs, or a fragment and the vase it belongs
+to). In the second, the query is a single view of an object, as captured by a scanner, and we want the
+models with similar views. In both cases local information is better than global information to
+characterise portions of a shape, so a local analysis of the geometry is required: a local descriptor
+at many points (spin images, FPFH, the heat kernel signature of \cref{ch:spectral}), and a way of
+aggregating them.
+
+\subsection{Bag of features}
+
+The \emph{bag of features} approach comes from text retrieval, where documents are represented by
+the frequencies of their words irrespective of order. The distribution of local descriptors in feature
+space reveals local structures useful for retrieval:
+\begin{enumerate}
+  \item compute local descriptors at many points of every shape in a training collection;
+  \item cluster them (for example with $k$-means) into a \emph{vocabulary} of $K$ geometric words, the
+  cluster centres;
+  \item for a shape, assign each descriptor to its nearest word (vector quantisation) or softly to
+  several words with weights, and accumulate the histogram of word frequencies, weighted by the area of
+  each point;
+  \item compare shapes by a distance between histograms, optionally with tf-idf weights that
+  downweight words common to all shapes.
+\end{enumerate}
+The histogram discards where the words occur, which gives invariance to articulation and robustness
+to partiality and clutter (\cref{fig:bof}).
+
+\fig{ch14_bof.png}{Bag of features with a vocabulary of 12 words built by $k$-means on heat kernel
+signatures of a cat and a horse. Each point is coloured by its word: the vocabulary separates
+extremities (paws, tail tip, ears), limbs and the torso. The area-weighted word histograms are the
+global descriptors; their L1 distance is $0.449$.}{fig:bof}
+
+Shape Google \citep{Bronstein2011} builds the vocabulary from heat kernel signatures, which are
+invariant to isometric deformations, adds \emph{spatially sensitive} bags of features (histograms of
+pairs of words weighted by their heat kernel proximity) to recover some geometric layout, and
+compresses the vectors into binary codes for fast search. A more recent alternative replaces vector
+quantisation by \emph{Fisher vectors} \citep{Perronnin2010}, which encode the deviation of the local
+descriptors (for example FPFH) from a Gaussian mixture model; this generalises the counting of words
+to first- and second-order statistics.
+
+\section{Symmetry detection}
+
+Many objects are symmetric, and detecting symmetries helps to understand their structure and
+regularity, to compress, to segment, and to complete missing parts.
+
+\paragraph{Extrinsic symmetries.} A reflection or rotation $T$ with $T(O)\cong O$ maps points to points
+with the same local geometry. Transformation-space voting \citep{Mitra2006} samples points, pairs those
+with similar local descriptors (for example principal curvatures), lets every pair vote for the
+transformation that maps one point to the other (for a reflection, the bisecting plane), and finds
+clusters in transformation space; each cluster is a candidate symmetry, possibly partial, which is then
+verified and grown on the surface.
+
+\paragraph{Descriptors from heat diffusion.} Heat diffusion on a surface from point sources is
+governed by the heat equation, and its solution, the heat kernel, depends on the eigenvalues and
+eigenfunctions of the Laplace--Beltrami operator (\cref{ch:spectral}). Because the operator is
+intrinsic, a variation of the solution of the heat equation guarantees that symmetric points have
+similar characterisations \citep{Sun2009}. \Citet{Sipiran2014} use this to detect approximate
+reflective symmetries in \emph{partial} meshes: detect local maxima of a diffusion-based function,
+match points with similar descriptors, and use the reflective symmetries they induce as hypotheses that
+are verified on the surface. Intrinsic symmetries, which map the surface to itself preserving geodesic
+distances (the left and right sides of a person in any pose), appear as sign changes of the
+Laplace--Beltrami eigenfunctions \citep{Ovsjanikov2008}.
+
+\paragraph{Cultural heritage.} Archaeological objects are often broken or eroded, and symmetry is a
+powerful prior to restore them. Partial symmetries let the missing geometry be synthesised from the
+symmetric counterpart, as in object completion by $k$-sparse optimisation \citep{Mavridis2015}.
+Axial symmetry is especially common: pottery is made on a wheel. \Citet{Sipiran2017} uses diffusion
+descriptors to find evidence of partial axial symmetry with a pipeline of four steps: sample points,
+find \emph{supporting circles} (sets of points with similar descriptors lying on circles), detect the
+axis consistent with most circles, and complete the object by rotating its profile around the axis.
+Data-driven methods go further and learn the structure of object classes with deep generative models to
+complete shapes.
+
+\begin{keypoints}
+\begin{itemize}[leftmargin=*]
+  \item Shape analysis tasks: saliency, segmentation, symmetry, characterisation and similarity.
+  \item Global descriptors (depth buffer, PANORAMA) usually require PCA pose normalisation, which is
+  ambiguous in sign and order; shape distributions avoid it but are extrinsic.
+  \item Partial similarity needs local descriptors aggregated with bags of features (vocabulary by
+  $k$-means, word histograms) or Fisher vectors.
+  \item Symmetry detection uses transformation voting or diffusion-based descriptors, with
+  applications to the restoration of cultural heritage objects.
+\end{itemize}
+\end{keypoints}
+
+\section*{Exercises}
+\begin{exercise}
+Show that the eigenvectors of the covariance matrix of a shape rotate with the shape, and that the
+third moments along them change sign when the shape is reflected. Why does this make pose
+normalisation ambiguous for symmetric shapes?
+\end{exercise}
+\begin{exercise}
+Prove that the magnitude of the 2D discrete Fourier transform is invariant to cyclic shifts of the
+image. Which rotations of the object does this make PANORAMA robust to?
+\end{exercise}
+\begin{exercise}
+In a bag of features with $K$ words built from $D$-dimensional descriptors, how many numbers does a
+Fisher vector with a $K$-component diagonal Gaussian mixture store? Compare with the word histogram.
+\end{exercise}
